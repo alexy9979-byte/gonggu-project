@@ -26,19 +26,16 @@ app.get('/', (req, res) => {
 });
 
 // ==========================================
-// 💛 [리얼 인프라] 진짜 카카오 로그인 Oauth2 핵심 라우터 (주소 고정 안전 버전)
+// 💛 [리얼 인프라] 진짜 카카오 로그인 Oauth2 핵심 라우터 (환경변수 완전 박멸 버전)
 // ==========================================
-// ==========================================
-// 💛 [리얼 인프라] 진짜 카카오 로그인 Oauth2 핵심 라우터 (2차 검증 주소 완벽 고정)
-// ==========================================
+
+// 🌟 [Yong님 필독]여기에 카카오 개발자 센터에서 복사한 REST API 키를 직접 넣어주세요!
+const REAL_KAKAO_KEY = "여기에_카카오_REST_API_키_붙여넣기"; 
+const FIXED_REDIRECT_URI = "https://gonggu-project.onrender.com/api/auth/kakao/callback";
 
 // 1. 프론트엔드가 카카오 로그인창을 열기 위해 요청하는 인증 주소 API
 app.get('/api/auth/kakao/url', (req, res) => {
-  const REST_API_KEY = process.env.KAKAO_REST_KEY;
-  // 🌟 맨 뒤에 슬래시(/)가 절대 없어야 합니다. 카카오 등록 주소와 완벽 매칭!
-  const REDIRECT_URI = "https://gonggu-project.onrender.com/api/auth/kakao/callback";
-  
-  const kakaoAuthUrl = `https://kauth.kakao.com/oauth/authorize?client_id=${REST_API_KEY}&redirect_uri=${REDIRECT_URI}&response_type=code`;
+  const kakaoAuthUrl = `https://kauth.kakao.com/oauth/authorize?client_id=${REAL_KAKAO_KEY}&redirect_uri=${FIXED_REDIRECT_URI}&response_type=code`;
   res.json({ url: kakaoAuthUrl });
 });
 
@@ -47,25 +44,22 @@ app.get('/api/auth/kakao/callback', async (req, res) => {
   const { code } = req.query;
   if (!code) return res.status(400).send('카카오 인증 코드가 없습니다.');
 
-  // 🌟 1차 주소와 단 한 글자도 틀리지 않게 똑같은 주소로 고정!
-  const REDIRECT_URI = "https://gonggu-project.onrender.com/api/auth/kakao/callback";
-
   try {
-    // [A] 전달받은 인증 코드로 카카오 토큰 발급 요청 (카카오 규격에 맞게 전송)
+    // [A] 전달받은 인증 코드로 카카오 토큰 발급 요청
     const tokenRes = await fetch('https://kauth.kakao.com/oauth/token', {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=utf-8' },
       body: new URLSearchParams({
         grant_type: 'authorization_code',
-        client_id: process.env.KAKAO_REST_KEY,
-        redirect_uri: REDIRECT_URI, // 👈 카카오 2차 검문소가 검증하는 주소입니다.
+        client_id: REAL_KAKAO_KEY,
+        redirect_uri: FIXED_REDIRECT_URI,
         code: String(code)
       })
     });
     
     const tokenData = await tokenRes.json();
 
-    // 🚨 혹시 카카오 내부에서 토큰 발급 실패 시 로그 추적용
+    // 토큰 발급 실패 시 로그 추적용
     if (tokenData.error) {
       console.error('카카오 토큰 발급 에러 상세:', tokenData);
       return res.status(400).send(`카카오 토큰 발급 실패: ${tokenData.error_description}`);
@@ -89,7 +83,7 @@ app.get('/api/auth/kakao/callback', async (req, res) => {
       usersDB.push(user);
     }
 
-    // 로그인 성공 후 프론트엔드 화면으로 유저 이름을 세션 스크립트에 실어 리다이렉트
+    // 로그인 성공 후 프론트엔드 화면으로 리다이렉트 및 세션 심기
     res.send(`
       <script>
         localStorage.setItem('공구메이트_유저', '${user.name}');
@@ -134,7 +128,6 @@ app.post('/api/groups/:id/join', (req, res) => {
 
   group.participants.push(userName);
   
-  // 매칭 완료 시 정확히 5분 뒤 자동 제거 스펙
   if (group.participants.length >= group.targetPeople) {
     group.status = '매칭완료';
     setTimeout(() => {
@@ -157,16 +150,13 @@ app.post('/api/groups/:id/leave', (req, res) => {
     return res.status(400).json({ message: '이미 매칭이 완료되어 취소할 수 없습니다.' });
   }
 
-  // 👑 배열의 첫 번째 자리에 있는 유저가 방장(최초 개설자)입니다.
   const isOwner = group.participants[0] === userName;
 
   if (isOwner) {
-    // 💥 방장이 취소한 경우: 방 전체를 파기
     cloudMockGroups = cloudMockGroups.filter(g => g._id !== group._id);
     io.emit('room_deleted', { id: group._id });
     return res.status(200).json({ action: 'delete', message: '🚪 방장 권한으로 공구방을 폭파했습니다.' });
   } else {
-    // 👥 참가자가 취소한 경우: 해당 참가자만 명단에서 제외
     if (!group.participants.includes(userName)) {
       return res.status(400).json({ message: '이 공구방에 참여하고 있지 않습니다.' });
     }
