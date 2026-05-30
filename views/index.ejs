@@ -22,11 +22,13 @@
 <body>
 
   <div class="container py-5">
+    <!-- 🎓 대학교 맞춤형 상단 타이틀 -->
     <div class="text-center mb-5">
       <h1 class="display-5 fw-bold text-primary">🛒 공구메이트</h1>
       <p class="text-muted">우리 대학교 학생들과 함께하는 실시간 공동구매 플랫폼</p>
     </div>
 
+    <!-- 1. 카카오 로그인 섹션 -->
     <div id="auth-section" class="card p-4 mx-auto mb-5" style="max-width: 450px;">
       <h4 class="text-center fw-bold mb-3">💛 서비스 시작하기</h4>
       <p class="text-center text-muted small mb-4">카카오 공식 계정 연동을 통해 1초 만에 안전하게 로그인해보세요!</p>
@@ -36,35 +38,47 @@
       </button>
     </div>
 
+    <!-- 2. 메인 대시보드 섹션 -->
     <div id="main-dashboard" style="display: none;">
       <div class="alert alert-light card p-3 d-flex flex-row justify-content-between align-items-center mb-4">
         <div>
           🎉 카카오 프로필 닉네임 <span class="fw-bold text-success" id="user-display-name">유저명</span>님 로그인 완료! 
           <span class="badge bg-warning text-dark ms-2">🟡 Kakao Live</span>
+          <span class="badge bg-info text-white ms-1" id="noti-status">🔔 실시간 알림 대기중</span>
         </div>
         <button onclick="handleLogout()" class="btn btn-outline-danger btn-sm">로그아웃</button>
       </div>
 
       <div class="row">
+        <!-- 왼쪽: 공구방 개설 폼 (📚 전공책 예시 및 📅 마감일 선택UI 반영) -->
         <div class="col-md-4 mb-4">
           <div class="card p-4 h-100">
             <h4 class="fw-bold text-dark mb-4">📦 새로운 공구 열기</h4>
             <div class="mb-3">
               <label class="form-label small fw-bold">공구방 제목</label>
-              <input type="text" id="group-title" class="form-control" placeholder="예: 기숙사 정문 앞 과일 쪼개실 분">
+              <input type="text" id="group-title" class="form-control" placeholder="예: 경영학원론 제3판 같이 사요">
             </div>
             <div class="mb-3">
-              <label class="form-label small fw-bold">구매 물품명</label>
-              <input type="text" id="group-item" class="form-control" placeholder="예: 샤인머스캣 3송이 박스">
+              <label class="form-label small fw-bold">구매 물품명 (전공책 등)</label>
+              <input type="text" id="group-item" class="form-control" placeholder="예: 무역출판사 경영학원론 교재">
             </div>
-            <div class="mb-4">
+            <div class="mb-3">
               <label class="form-label small fw-bold">목표 인원 설정 (명)</label>
               <input type="number" id="group-target" class="form-control" value="2" min="2">
+            </div>
+            <div class="mb-4">
+              <label class="form-label small fw-bold">모집 기한 설정</label>
+              <select id="group-deadline" class="form-select">
+                <option value="1">1일 동안 모집 (내일까지)</option>
+                <option value="3">3일 동안 모집</option>
+                <option value="7">7일 동안 모집 (1주일)</option>
+              </select>
             </div>
             <button onclick="createGroup()" class="btn btn-primary w-100 fw-bold py-2">🚀 공동구매 방 개설</button>
           </div>
         </div>
 
+        <!-- 오른쪽: 실시간 캠퍼스 공구 목록 리스트 (📅 기한 및 연장버튼 반영) -->
         <div class="col-md-8 mb-4">
           <div class="card p-4 h-100">
             <h4 class="fw-bold text-dark mb-4">⚡ 캠퍼스 실시간 공구 목록</h4>
@@ -86,9 +100,13 @@
                             <span class="text-dark fw-bold" id="people-<%= group._id %>"><%= group.participants.join(', ') %></span>
                           </div>
                         </div>
-                        <div class="d-flex flex-column gap-2" id="btn-area-<%= group._id %>">
+                        <div class="d-flex flex-column gap-2 text-end" id="btn-area-<%= group._id %>">
+                          <div class="small text-danger fw-bold mb-1">
+                            ⏳ 마감: <span id="time-display-<%= group._id %>"><%= new Date(group.deadline).toLocaleDateString() %></span> 까지
+                          </div>
                           <% if (group.status === '모집중') { %>
                             <button onclick="joinGroup('<%= group._id %>')" class="btn btn-sm btn-outline-primary px-3">참여하기</button>
+                            <button onclick="extendGroup('<%= group._id %>')" class="btn btn-sm btn-outline-warning px-3">📅 기한 연장 (+1일)</button>
                             <button onclick="leaveGroup('<%= group._id %>')" class="btn btn-sm btn-outline-danger px-3">취소</button>
                           <% } else { %>
                             <button class="btn btn-sm btn-secondary" disabled>매칭완료</button>
@@ -121,11 +139,41 @@
         document.getElementById('auth-section').style.display = 'none';
         document.getElementById('main-dashboard').style.display = 'block';
         document.getElementById('user-display-name').innerText = currentUser;
+        
+        // 🔔 브라우저 알림 권한 가동
+        requestNotificationPermission();
       } else {
         document.getElementById('auth-section').style.display = 'block';
         document.getElementById('main-dashboard').style.display = 'none';
       }
     };
+
+    // 🔒 알림 권한 획득 함수
+    function requestNotificationPermission() {
+      if (!("Notification" in window)) return;
+      
+      if (Notification.permission !== "granted" && Notification.permission !== "denied") {
+        Notification.requestPermission().then(permission => {
+          if (permission === "granted") {
+            document.getElementById('noti-status').innerText = "🔔 실시간 푸시 알림 ON";
+            document.getElementById('noti-status').className = "badge bg-success text-white ms-1";
+          }
+        });
+      } else if (Notification.permission === "granted") {
+        document.getElementById('noti-status').innerText = "🔔 실시간 푸시 알림 ON";
+        document.getElementById('noti-status').className = "badge bg-success text-white ms-1";
+      }
+    }
+
+    // 🚀 실제 푸시 알림창 팝업 함수
+    function spawnNotification(title, body) {
+      if (Notification.permission === "granted") {
+        new Notification(title, {
+          body: body,
+          icon: 'https://cdn-icons-png.flaticon.com/512/3081/3081986.png'
+        });
+      }
+    }
 
     async function handleKakaoLogin() {
       try {
@@ -146,22 +194,35 @@
       location.reload();
     }
 
+    // 📦 방 개설 데이터 발송 (기한 days 정보 추가)
     async function createGroup() {
       const title = document.getElementById('group-title').value;
       const item = document.getElementById('group-item').value;
       const targetPeople = document.getElementById('group-target').value;
+      const deadlineDays = document.getElementById('group-deadline').value;
 
       if (!title || !item) return alert("공구방 개설 정보를 입력해주세요!");
 
       const res = await fetch('/api/groups', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title, item, targetPeople, writer: currentUser })
+        body: JSON.stringify({ title, item, targetPeople, deadlineDays, writer: currentUser })
       });
 
       if (res.status === 201) {
-        alert("🚀 성공적으로 방이 개설되었습니다!");
+        alert("🚀 성공적으로 전공책 공구방이 개설되었습니다!");
         location.reload();
+      }
+    }
+
+    // 📅 기한 하루 연장 요청 함수
+    async function extendGroup(id) {
+      const res = await fetch(`/api/groups/${id}/extend`, { method: 'POST' });
+      const data = await res.json();
+      if (res.status === 200) {
+        alert(data.message);
+      } else {
+        alert(data.message);
       }
     }
 
@@ -199,15 +260,27 @@
     }
 
     // ==========================================
-    // 🛜 Socket.io 실시간 동기화 수신부
+    // 🛜 Socket.io 양방향 실시간 동기화 마당
     // ==========================================
     socket.on('status_updated', (data) => {
       const g = data.group;
       const countEl = document.getElementById(`count-${g._id}`);
       const peopleEl = document.getElementById(`people-${g._id}`);
+      const timeDisplay = document.getElementById(`time-display-${g._id}`);
       
       if (countEl) countEl.innerText = g.participants.length;
       if (peopleEl) peopleEl.innerText = g.participants.join(', ');
+      
+      // 📅 기한 연장 시 화면 날짜 실시간 연동 업데이트
+      if (timeDisplay) timeDisplay.innerText = new Date(g.deadline).toLocaleDateString();
+
+      // 🔔 현황 공유 실시간 알림 푸시
+      if (g.participants.includes(currentUser) && g.status === '모집중') {
+        const latestUser = g.participants[g.participants.length - 1];
+        if (latestUser !== currentUser) {
+          spawnNotification(`⚡ [공구메이트 현황]`, `"${g.title}" 방에 ${latestUser}님이 새로 참여했습니다! (${g.participants.length}/${g.targetPeople}명)`);
+        }
+      }
 
       if (g.status === '매칭완료') {
         const badge = document.getElementById(`status-badge-${g._id}`);
@@ -219,12 +292,23 @@
         if (btnArea) {
           btnArea.innerHTML = `<button class="btn btn-sm btn-secondary" disabled>매칭완료</button>`;
         }
+
+        if (g.participants.includes(currentUser)) {
+          spawnNotification(`🎉 [공구 매칭 완료!]`, `축하합니다! "${g.title}" 모임이 성사되었습니다. 정문이나 열람실에서 교재를 수령하세요!`);
+        }
       }
     });
 
     socket.on('room_deleted', (data) => {
       const targetCard = document.getElementById(`card-${data.id}`);
-      if (targetCard) targetCard.remove();
+      if (targetCard) {
+        targetCard.remove();
+        // ⏰ 기한 만료 폭파 패키지 알림 수신
+        if (data.reason === 'timeout') {
+          alert(`⏰ [기간 만료 통보]\n"${data.title}" 공구방의 모집 기한이 지나 자동 취소(폭파)되었습니다.`);
+          spawnNotification(`⏰ [기간 만료 취소]`, `"${data.title}" 방이 기한 초과로 인해 취소되었습니다.`);
+        }
+      }
     });
   </script>
 </body>
