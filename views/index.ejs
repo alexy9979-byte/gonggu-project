@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>🛒 공구메이트 - 실시간 공동구매</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+  <script src="/socket.io/socket.io.js"></script>
+</head>
+<body class="bg-light">
+  <div class="container py-5">
+    <header class="pb-3 mb-4 border-bottom">
+      <h1 class="display-5 fw-bold text-primary">🛒 공구메이트 (GongGu Mate)</h1>
+      <p class="text-muted">우리 동네 실시간 공동구매 플랫폼</p>
+    </header>
+
+    <div class="row align-items-md-stretch">
+      <div class="col-md-4">
+        <div class="h-100 p-4 bg-white border rounded-3 shadow-sm">
+          <h3 class="mb-3">🚀 새로운 공구방 열기</h3>
+          <div class="mb-3">
+            <label class="form-label">공구방 제목</label>
+            <input type="text" id="title" class="form-control" placeholder="예: 정문 앞 치킨 공구">
+          </div>
+          <div class="mb-3">
+            <label class="form-label">모집 물품</label>
+            <input type="text" id="item" class="form-control" placeholder="예: 후라이드 치킨">
+          </div>
+          <div class="mb-3">
+            <label class="form-label">목표 인원 (명)</label>
+            <input type="number" id="targetPeople" class="form-control" value="4" min="2">
+          </div>
+          <button onclick="createGroup()" class="btn btn-primary w-100">방 만들기</button>
+        </div>
+      </div>
+
+      <div class="col-md-8">
+        <div class="h-100 p-4 bg-white border rounded-3 shadow-sm">
+          <h3 class="mb-3">📢 현재 모집 중인 공구방</h3>
+          <div id="group-list" class="list-group">
+            <% if (groups.length === 0) { %>
+              <p class="text-muted p-3 text-center">현재 개설된 공구방이 없습니다. 첫 번째 방을 만들어보세요!</p>
+            <% } %>
+            
+            <% groups.forEach(function(group) { %>
+              <div class="list-group-item p-3 mb-2 border rounded shadow-sm" id="room-<%= group._id %>">
+                <div class="d-flex w-100 justify-content-between align-items-center">
+                  <h5 class="mb-1 fw-bold text-dark"><%= group.title %></h5>
+                  <span class="badge bg-success rounded-pill p-2" id="status-<%= group._id %>"><%= group.status %></span>
+                </div>
+                <p class="mb-2 text-secondary">🎁 품목: <strong><%= group.item %></strong></p>
+                <div class="d-flex justify-content-between align-items-center">
+                  <span class="text-primary fw-bold" id="count-<%= group._id %>">
+                    현재 참여 인원: <%= group.participants.length %> / <%= group.targetPeople %> 명
+                  </span>
+                  <button onclick="joinGroup('<%= group._id %>')" class="btn btn-sm btn-outline-primary" id="btn-<%= group._id %>">참여하기</button>
+                </div>
+              </div>
+            <% }); %>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const socket = io();
+
+    // 웹사이트가 켜지면 기존에 개설된 모든 방의 실시간 소켓 룸에 접속합니다 (13주차)
+    <% groups.forEach(function(group) { %>
+      socket.emit('join_room', '<%= group._id %>');
+    <% }); %>
+
+    // [실시간 알림 수신] 누군가 참여 버튼을 누르면 화면의 숫자와 상태가 실시간으로 바뀝니다!
+    socket.on('status_updated', function(data) {
+      const group = data.group;
+      
+      // 실시간으로 텍스트와 명수 업데이트
+      document.getElementById(`count-${group._id}`).innerText = `현재 참여 인원: ${group.participants.length} / ${group.targetPeople} 명`;
+      
+      if (group.status === '매칭완료') {
+        const badge = document.getElementById(`status-${group._id}`);
+        badge.innerText = '매칭완료';
+        badge.className = 'badge bg-danger rounded-pill p-2';
+        document.getElementById(`btn-${group._id}`).disabled = true;
+        alert(`🎉 [${group.title}] 공구 매칭 성공! 인원이 모두 모였습니다!`);
+      }
+    });
+
+    // 버튼 클릭 이벤트: 새로운 공구방 생성 API 요청 (7주차 POST)
+    async function createGroup() {
+      const title = document.getElementById('title').value;
+      const item = document.getElementById('item').value;
+      const targetPeople = document.getElementById('targetPeople').value;
+
+      if (!title || !item) return alert('내용을 모두 입력해주세요!');
+
+      const res = await fetch('/api/groups', {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          // 2교시 때 가짜 인증 통과를 위해 테스트용 토큰 헤더 구성
+          'Authorization': 'Bearer test-token'
+        },
+        body: JSON.stringify({ title, item, targetPeople })
+      });
+
+      if (res.status === 201) {
+        window.location.reload(); // 성공 시 화면을 새로고침하여 리스트에 반영
+      }
+    }
+
+    // 버튼 클릭 이벤트: 공구방 실시간 참여 API 요청 (7주차 POST)
+    async function joinGroup(id) {
+      const res = await fetch(`/api/groups/${id}/join`, {
+        method: 'POST',
+        headers: { 'Authorization': 'Bearer test-token' }
+      });
+      
+      const data = await res.json();
+      if (res.status === 200) {
+        alert('공구 참여 신청이 완료되었습니다!');
+      } else {
+        alert(data.message);
+      }
+    }
+  </script>
+</body>
+</html>
