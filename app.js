@@ -37,7 +37,7 @@ const transporter = nodemailer.createTransport({
   secure: false, 
   auth: {
     user: 'alexy9979@gmail.com', // 👈 1. 본인의 진짜 구글 이메일을 넣으세요.
-    pass: 'abcdefghijklmnop'      // 👈 2. 아까 발급받은 16자리 앱 비밀번호를 '공백 없이' 붙여넣으세요!
+    pass: 'zgkxsoofmvhlugnf'      // 👈 2. 아까 발급받은 16자리 앱 비밀번호를 '공백 없이' 붙여넣으세요!
   }
 });
 
