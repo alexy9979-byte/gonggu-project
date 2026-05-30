@@ -24,35 +24,68 @@
 <body>
 
   <div class="container py-5">
-    <!-- 🎓 대학교 맞춤형 상단 타이틀 -->
+    <!-- 🎓 상단 타이틀 -->
     <div class="text-center mb-5">
       <h1 class="display-5 fw-bold text-primary">🛒 공구메이트</h1>
       <p class="text-muted">우리 대학교 학생들과 함께하는 실시간 공동구매 플랫폼</p>
     </div>
 
-    <!-- 1. 카카오 로그인 섹션 -->
+    <!-- 1. 통합 인증 섹션 (자체 회원가입/로그인 + 카카오) -->
     <div id="auth-section" class="card p-4 mx-auto mb-5" style="max-width: 450px;">
-      <h4 class="text-center fw-bold mb-3">💛 서비스 시작하기</h4>
-      <p class="text-center text-muted small mb-4">카카오 공식 계정 연동을 통해 1초 만에 안전하게 로그인해보세요!</p>
-      
-      <button onclick="handleKakaoLogin()" class="kakao-btn">
-        <span>💬</span> 카카오 계정으로 간편 로그인
-      </button>
+      <!-- 상단 탭 스위치 -->
+      <div class="d-flex justify-content-center gap-3 mb-4">
+        <button id="tab-login-btn" class="btn btn-primary btn-sm px-4" onclick="switchAuthTab('login')">로그인</button>
+        <button id="tab-reg-btn" class="btn btn-outline-secondary btn-sm px-4" onclick="switchAuthTab('register')">회원가입</button>
+      </div>
+
+      <!-- [A] 로그인 폼 -->
+      <div id="form-login-box">
+        <h5 class="fw-bold mb-3">🎓 학번으로 로그인</h5>
+        <div class="mb-3">
+          <input type="text" id="login-student-id" class="form-control" placeholder="학번 입력 (예: 20261234)">
+        </div>
+        <div class="mb-3">
+          <input type="password" id="login-pwd" class="form-control" placeholder="비밀번호">
+        </div>
+        <button onclick="handleLocalLogin()" class="btn btn-dark w-100 fw-bold mb-3 py-2">로그인</button>
+        
+        <div class="text-center text-muted small mb-3">또는 간편 연동</div>
+        <button onclick="handleKakaoLogin()" class="kakao-btn">
+          <span>💬</span> 카카오 계정 로그인
+        </button>
+      </div>
+
+      <!-- [B] 회원가입 폼 -->
+      <div id="form-register-box" style="display: none;">
+        <h5 class="fw-bold mb-3 text-success">📝 학생 회원가입</h5>
+        <div class="mb-3">
+          <label class="form-label small fw-bold">학번</label>
+          <input type="text" id="reg-student-id" class="form-control" placeholder="학번 8자리 입력">
+        </div>
+        <div class="mb-3">
+          <label class="form-label small fw-bold">이름 (본명)</label>
+          <input type="text" id="reg-name" class="form-control" placeholder="홍길동">
+        </div>
+        <div class="mb-3">
+          <label class="form-label small fw-bold">비밀번호 설정</label>
+          <input type="password" id="reg-pwd" class="form-control" placeholder="비밀번호 입력">
+        </div>
+        <button onclick="handleLocalRegister()" class="btn btn-success w-100 fw-bold py-2">가입 완료하기</button>
+      </div>
     </div>
 
     <!-- 2. 메인 대시보드 섹션 -->
     <div id="main-dashboard" style="display: none;">
       <div class="alert alert-light card p-3 d-flex flex-row justify-content-between align-items-center mb-4">
         <div>
-          🎉 카카오 프로필 닉네임 <span class="fw-bold text-success" id="user-display-name">유저명</span>님 로그인 완료! 
-          <span class="badge bg-warning text-dark ms-2">🟡 Kakao Live</span>
-          <span class="badge bg-info text-white ms-1" id="noti-status">🔔 실시간 알림 대기중</span>
+          🎉 안녕하세요, <span class="fw-bold text-success" id="user-display-name">유저명</span>님! 
+          <span class="badge bg-info text-white ms-2" id="noti-status">🔔 실시간 알림 대기중</span>
         </div>
         <button onclick="handleLogout()" class="btn btn-outline-danger btn-sm">로그아웃</button>
       </div>
 
       <div class="row">
-        <!-- 왼쪽: 공구방 개설 폼 (마감 기한 달력 + 배포 일정/장소 선택 반영) -->
+        <!-- 왼쪽: 공구방 개설 폼 -->
         <div class="col-md-4 mb-4">
           <div class="card p-4 h-100">
             <h4 class="fw-bold text-dark mb-4">📦 새로운 공구 열기</h4>
@@ -73,13 +106,13 @@
               <input type="date" id="group-deadline-date" class="form-control">
             </div>
             
-            <!-- 📅 배포 날짜 달력 지정 -->
+            <!-- 📅 배포 날짜 달력 -->
             <div class="mb-3">
               <label class="form-label small fw-bold text-success">📅 배포(수령) 희망 날짜</label>
               <input type="date" id="group-dist-date" class="form-control">
             </div>
 
-            <!-- 🏫 성공회대 전용 배포 장소 셀렉트 박스 -->
+            <!-- 🏫 성공회대 전용 배포 장소 -->
             <div class="mb-4">
               <label class="form-label small fw-bold text-success">📍 배포(수령) 장소 선택</label>
               <select id="group-dist-location" class="form-select">
@@ -101,7 +134,7 @@
           </div>
         </div>
 
-        <!-- 오른쪽: 실시간 캠퍼스 공구 목록 리스트 (배포일정 뱃지 출력) -->
+        <!-- 오른쪽: 실시간 캠퍼스 공구 목록 리스트 -->
         <div class="col-md-8 mb-4">
           <div class="card p-4 h-100">
             <h4 class="fw-bold text-dark mb-4">⚡ 캠퍼스 실시간 공구 목록</h4>
@@ -119,7 +152,7 @@
                           <h5 class="fw-bold mb-1"><%= group.title %></h5>
                           <p class="text-muted small mb-2">📦 물품: <%= group.item %></p>
                           
-                          <!-- 🏫 목록 화면 내 배포 날짜 및 건물 뱃지 렌더링 구역 -->
+                          <!-- 배포 날짜 및 건물 뱃지 -->
                           <div class="mb-2">
                             <span class="badge dist-badge-date">📅 배포일: <%= group.distDate %></span>
                             <span class="badge dist-badge-loc">📍 장소: <%= group.distLocation %></span>
@@ -148,7 +181,7 @@
                 <% }); %>
               <% } else { %>
                 <div class="text-center py-5 text-muted" id="empty-message">
-                  현재 개설된 공구방이 없습니다. 카카오 로그인 후 첫 방을 빌드해 보세요!
+                  현재 개설된 공구방이 없습니다. 가입 후 첫 방을 빌드해 보세요!
                 </div>
               <% } %>
 
@@ -170,10 +203,7 @@
         document.getElementById('main-dashboard').style.display = 'block';
         document.getElementById('user-display-name').innerText = currentUser;
         
-        // 🔔 시스템 브라우저 푸시 알림 가동
         requestNotificationPermission();
-        
-        // 📅 달력 입력창 오늘 날짜 자동 기본값 세팅
         initDefaultDates();
       } else {
         document.getElementById('auth-section').style.display = 'block';
@@ -181,7 +211,6 @@
       }
     };
 
-    // 📅 모집 마감일 및 배포 희망일 자동 인덱싱 함수
     function initDefaultDates() {
       const todayStr = new Date().toISOString().substring(0, 10);
       
@@ -198,14 +227,11 @@
       }
     }
 
-    // 🔒 브라우저 알림 허용 함수
     function requestNotificationPermission() {
       if (!("Notification" in window)) return;
       if (Notification.permission !== "granted" && Notification.permission !== "denied") {
         Notification.requestPermission().then(permission => {
-          if (permission === "granted") {
-            setNotiBadgeActive();
-          }
+          if (permission === "granted") setNotiBadgeActive();
         });
       } else if (Notification.permission === "granted") {
         setNotiBadgeActive();
@@ -233,11 +259,7 @@
       try {
         const res = await fetch('/api/auth/kakao/url');
         const data = await res.json();
-        if (data.url) {
-          window.location.href = data.url;
-        } else {
-          alert("카카오 엔드포인트를 가져오지 못했습니다.");
-        }
+        if (data.url) window.location.href = data.url;
       } catch (e) {
         alert("네트워크 오류가 발생했습니다.");
       }
@@ -248,7 +270,6 @@
       location.reload();
     }
 
-    // 📦 배포일 및 배포장소가 융합된 방 개설 데이터 패키징 함수
     async function createGroup() {
       const title = document.getElementById('group-title').value;
       const item = document.getElementById('group-item').value;
@@ -265,13 +286,7 @@
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
-          title, 
-          item, 
-          targetPeople, 
-          deadlineDateStr, 
-          distDate, 
-          distLocation, 
-          writer: currentUser 
+          title, item, targetPeople, deadlineDateStr, distDate, distLocation, writer: currentUser 
         })
       });
 
@@ -281,14 +296,12 @@
       }
     }
 
-    // 📅 오직 방장만 연장할 수 있도록 이름 식별값을 전송하는 기한 연장 함수
     async function extendGroup(id) {
       const res = await fetch(`/api/groups/${id}/extend`, { 
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userName: currentUser })
       });
-      
       const data = await res.json();
       alert(data.message);
     }
@@ -299,13 +312,8 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userName: currentUser })
       });
-
-      if (res.status === 200) {
-        alert("✅ 공구 메이트로 참여되었습니다!");
-      } else {
-        const data = await res.json();
-        alert(data.message);
-      }
+      const data = await res.json();
+      alert(data.message);
     }
 
     async function leaveGroup(id) {
@@ -314,13 +322,66 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userName: currentUser })
       });
+      const data = await res.json();
+      alert(data.message);
+      if (res.status === 200 && data.action === 'delete') {
+        location.reload();
+      }
+    }
+
+    // 🔄 로그인 / 회원가입 화면 탭 전환 함수
+    function switchAuthTab(type) {
+      const loginBox = document.getElementById('form-login-box');
+      const regBox = document.getElementById('form-register-box');
+      const loginBtn = document.getElementById('tab-login-btn');
+      const regBtn = document.getElementById('tab-reg-btn');
+
+      if (type === 'login') {
+        loginBox.style.display = 'block';
+        regBox.style.display = 'none';
+        loginBtn.className = "btn btn-primary btn-sm px-4";
+        regBtn.className = "btn btn-outline-secondary btn-sm px-4";
+      } else {
+        loginBox.style.display = 'none';
+        regBox.style.display = 'block';
+        loginBtn.className = "btn btn-outline-secondary btn-sm px-4";
+        regBtn.className = "btn btn-success btn-sm px-4";
+      }
+    }
+
+    // 📝 일반 회원가입 요청 함수
+    async function handleLocalRegister() {
+      const studentId = document.getElementById('reg-student-id').value;
+      const name = document.getElementById('reg-name').value;
+      const password = document.getElementById('reg-pwd').value;
+
+      const res = await fetch('/api/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ studentId, name, password })
+      });
+
+      const data = await res.json();
+      alert(data.message);
+      if (res.status === 201) switchAuthTab('login');
+    }
+
+    // 🔑 일반 로그인 요청 함수
+    async function handleLocalLogin() {
+      const studentId = document.getElementById('login-student-id').value;
+      const password = document.getElementById('login-pwd').value;
+
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ studentId, password })
+      });
 
       const data = await res.json();
       if (res.status === 200) {
-        alert(data.message);
-        if (data.action === 'delete') {
-          location.reload();
-        }
+        localStorage.setItem('공구메이트_유저', data.userName);
+        alert(`👋 안녕하세요, ${data.userName}님! 반갑습니다.`);
+        location.reload();
       } else {
         alert(data.message);
       }
@@ -339,7 +400,6 @@
       if (peopleEl) peopleEl.innerText = g.participants.join(', ');
       if (timeDisplay) timeDisplay.innerText = new Date(g.deadline).toLocaleDateString();
 
-      // 실시간 참여자 증가 시스템 브라우저 푸시 알림
       if (g.participants.includes(currentUser) && g.status === '모집중') {
         const latestUser = g.participants[g.participants.length - 1];
         if (latestUser !== currentUser) {
@@ -354,9 +414,7 @@
           badge.innerText = "매칭완료";
         }
         const btnArea = document.getElementById(`btn-area-${g._id}`);
-        if (btnArea) {
-          btnArea.innerHTML = `<button class="btn btn-sm btn-secondary" disabled>매칭완료</button>`;
-        }
+        if (btnArea) btnArea.innerHTML = `<button class="btn btn-sm btn-secondary" disabled>매칭완료</button>`;
 
         if (g.participants.includes(currentUser)) {
           spawnNotification(`🎉 [공구 매칭 성사!]`, `축하합니다! "${g.title}" 팀 매칭 완료.\n지정된 배포일(${g.distDate})에 [${g.distLocation}]에서 교재를 수령하세요!`);

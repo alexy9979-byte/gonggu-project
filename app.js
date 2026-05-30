@@ -15,14 +15,16 @@ app.set('views', path.join(process.cwd(), 'views'));
 
 app.use(cors());
 app.use(express.json());
-
+// 📱 [추가] 푸시 알림 서비스 워커(sw.js) 접근을 위한 public 폴더 개방
+app.use(express.static(path.join(process.cwd(), 'public')));
 // [인메모리 고성능 데이터베이스 보관소]
 let usersDB = []; 
 let cloudMockGroups = []; 
 
 // 전역 토큰 공유 저장소 선언
 global.latest_access_token = ''; 
-
+// 20번째 줄 global.latest_access_token = ''; 바로 아래에 추가
+global.io = io;
 // 메인 페이지 화면 렌더링
 app.get('/', (req, res) => {
   res.render('index', { groups: cloudMockGroups });
@@ -88,10 +90,62 @@ app.get('/api/auth/kakao/callback', async (req, res) => {
 });
 
 // ==========================================
+// 📝 [새로 추가] 일반 회원가입 및 자체 로그인 API
+// ==========================================
+
+// 1. 일반 회원가입 API (학번, 이름, 비밀번호 수신)
+app.post('/api/auth/register', (req, res) => {
+  const { studentId, name, password } = req.body;
+
+  if (!studentId || !name || !password) {
+    return res.status(400).json({ message: '모든 항목을 입력해주세요!' });
+  }
+
+  // 중복 가입 체크
+  const exists = usersDB.find(u => u.studentId === studentId);
+  if (exists) {
+    return res.status(400).json({ message: '이미 가입된 학번입니다.' });
+  }
+
+  // 회원 저장 (학번을 고유 ID처럼 활용)
+  const newUser = {
+    studentId,
+    name,
+    password, // 과제용 임시 저장 (해싱 생략)
+    provider: 'local'
+  };
+  usersDB.push(newUser);
+
+  res.status(201).json({ message: '🎉 회원가입 성공! 이제 로그인해 주세요.' });
+});
+
+// 2. 자체 로그인 API
+app.post('/api/auth/login', (req, res) => {
+  const { studentId, password } = req.body;
+
+  const user = usersDB.find(u => u.studentId === studentId && u.password === password);
+  if (!user) {
+    return res.status(400).json({ message: '학번 또는 비밀번호가 일치하지 않습니다.' });
+  }
+
+  // 기존 124번째 줄의 res.status(200)... 한 줄을 지우고 이 코드로 교체
+  // 일반 로그인 성공 시에도 최신 세션을 유지하여 카톡 알림 발송이 가능하도록 연동
+  if (!global.latest_access_token) {
+    global.latest_access_token = 'LOCAL_USER_SESSION'; 
+  }
+  res.status(200).json({ message: '성공', userName: user.name });
+});
+
+// ==========================================
 // 💬 [카톡 알림 마스터] 4대 이벤트 메시지 발송 엔진
 // ==========================================
 async function sendManagerKakaoAlert(messageText) {
   try {
+    
+    if (!global.latest_access_token || global.latest_access_token === 'LOCAL_USER_SESSION') {
+      console.log(`📱 [로컬 알림 중계] 아직 카카오 인증 전입니다. 로그 메시지: ${messageText.split('\n')[0]}`);
+      return;
+    }
     await fetch('https://kapi.kakao.com/v2/api/talk/memo/default/send', {
       method: 'POST',
       headers: {
