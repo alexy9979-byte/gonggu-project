@@ -26,11 +26,11 @@ app.get('/', (req, res) => {
 });
 
 // ==========================================
-// 💛 [리얼 인프라] 진짜 카카오 로그인 Oauth2 핵심 라우터 (환경변수 완전 박멸 버전)
+// 💛 [리얼 인프라] 진짜 카카오 로그인 Oauth2 핵심 라우터 (Yong님 진짜 키 고정형)
 // ==========================================
 
-// 🌟 [Yong님 필독]여기에 카카오 개발자 센터에서 복사한 REST API 키를 직접 넣어주세요!
-const REAL_KAKAO_KEY = "여기에_카카오_REST_API_키_붙여넣기"; 
+// 🌟 스크린샷으로 확인된 진짜 카카오 REST API 키와 리다이렉트 주소를 강제 고정했습니다.
+const REAL_KAKAO_KEY = "357e36fcb3413e6e62e59b71b65d161b"; 
 const FIXED_REDIRECT_URI = "https://gonggu-project.onrender.com/api/auth/kakao/callback";
 
 // 1. 프론트엔드가 카카오 로그인창을 열기 위해 요청하는 인증 주소 API
