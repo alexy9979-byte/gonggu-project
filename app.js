@@ -26,39 +26,68 @@ app.get('/', (req, res) => {
 });
 
 // ==========================================
-// 💛 [스펙 대체] 카카오 간편 연동 핵심 API 라우터 (100% 가동 보장)
+// 💛 [리얼 인프라] 진짜 카카오 로그인 Oauth2 핵심 라우터
 // ==========================================
 
-// 1. [API] 카카오톡 계정 정보로 간편 가입 및 통합 로그인 처리
-app.post('/api/auth/kakao-login', (req, res) => {
-  const { kakaoId, name, email } = req.body;
-  
-  if (!kakaoId || !name) {
-    return res.status(400).json({ message: '카카오 인증 정보가 누락되었습니다.' });
-  }
-
-  // 데이터베이스에 기존 가입된 카카오 유저가 있는지 확인
-  let user = usersDB.find(u => u.kakaoId === kakaoId);
-  
-  if (!user) {
-    // 없다면 카카오 정보로 즉시 자동 회원가입 진행
-    user = { kakaoId, name, email: email || `${kakaoId}@kakao.com`, provider: 'kakao' };
-    usersDB.push(user);
-    console.log(`[카카오 간편 가입 완료] 유저명: ${name}`);
-  } else {
-    console.log(`[카카오 간편 로그인 성공] 유저명: ${name}`);
-  }
-
-  // 성공 응답과 함께 웰컴 알림톡 시뮬레이션 메시지 반환
-  res.status(200).json({
-    message: `💛 카카오톡 인증 성공! ${name}님 환영합니다.`,
-    userName: user.name,
-    userEmail: user.email,
-    talkNotification: `[알림톡 발송 완료] 🔔 옐로아이디 [공구메이트]에서 ${name}님께 가입 축하 웰컴 메시지를 전송했습니다.`
-  });
+// 1. 프론트엔드가 카카오 로그인창을 열기 위해 요청하는 인증 주소 API
+app.get('/api/auth/kakao/url', (req, res) => {
+  const kakaoAuthUrl = `https://kauth.kakao.com/oauth/authorize?client_id=${process.env.KAKAO_REST_KEY}&redirect_uri=${process.env.KAKAO_REDIRECT_URI}&response_type=code`;
+  res.json({ url: kakaoAuthUrl });
 });
 
-// 2. [API] 새로운 공구방 개설 및 카카오 단톡방 알림 시뮬레이션
+// 2. 카카오 인증 완료 후, 카카오가 우리 서버로 코드를 던져주는 Callback 라우터
+app.get('/api/auth/kakao/callback', async (req, res) => {
+  const { code } = req.query;
+  if (!code) return res.status(400).send('카카오 인증 코드가 없습니다.');
+
+  try {
+    // [A] 전달받은 인증 코드로 카카오 토큰 발급 요청
+    const tokenRes = await fetch('https://kauth.kakao.com/oauth/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=utf-8' },
+      body: new URLSearchParams({
+        grant_type: 'authorization_code',
+        client_id: process.env.KAKAO_REST_KEY,
+        redirect_uri: process.env.KAKAO_REDIRECT_URI,
+        code
+      })
+    });
+    const tokenData = await tokenRes.json();
+
+    // [B] 발급받은 토큰으로 진짜 카카오 유저 정보(프로필, 이름 등) 가져오기
+    const userRes = await fetch('https://kapi.kakao.com/v2/user/me', {
+      method: 'GET',
+      headers: { 'Authorization': `Bearer ${tokenData.access_token}` }
+    });
+    const userData = await userRes.json();
+
+    // 카카오가 제공한 고유 유저 정보 파싱
+    const kakaoId = userData.id.toString();
+    const nickname = userData.properties?.nickname || '카카오유저';
+
+    // 데이터베이스에 자동 가입/로그인 처리
+    let user = usersDB.find(u => u.kakaoId === kakaoId);
+    if (!user) {
+      user = { kakaoId, name: nickname, provider: 'kakao' };
+      usersDB.push(user);
+    }
+
+    // 로그인 성공 후 프론트엔드 화면으로 유저 이름을 세션 스크립트에 실어 리다이렉트
+    res.send(`
+      <script>
+        localStorage.setItem('공구메이트_유저', '${user.name}');
+        alert('💛 진짜 카카오 인증 성공! ${user.name}님 환영합니다.');
+        window.location.href = '/';
+      </script>
+    `);
+
+  } catch (error) {
+    console.error('카카오 진짜 연동 실패 로그:', error);
+    res.status(500).send('카카오 로그인 처리 중 서버 내부 오류가 발생했습니다.');
+  }
+});
+
+// 3. [API] 새로운 공구방 개설
 app.post('/api/groups', (req, res) => {
   const { title, item, targetPeople, writer } = req.body;
   const newGroup = {
@@ -73,7 +102,7 @@ app.post('/api/groups', (req, res) => {
   res.status(201).json(newGroup);
 });
 
-// 3. [API] 공구방 참여 및 마감 시 카카오톡 알림톡 공유 연동
+// 4. [API] 공구방 실시간 참여
 app.post('/api/groups/:id/join', (req, res) => {
   const { userName } = req.body;
   const group = cloudMockGroups.find(g => g._id === req.params.id);
@@ -88,13 +117,9 @@ app.post('/api/groups/:id/join', (req, res) => {
 
   group.participants.push(userName);
   
-  // ⏰ 매칭이 성사되어 채워지면 알림톡 연동 메시지 생성
-  let matchNotification = null;
+  // 매칭 완료 시 정확히 5분 뒤 자동 제거 스펙
   if (group.participants.length >= group.targetPeople) {
     group.status = '매칭완료';
-    matchNotification = `📢 [공구 알림톡] '${group.title}' 공구 매칭이 완벽하게 성사되었습니다! 참여자 방으로 카카오 오픈채팅 링크가 전송되었습니다.`;
-    
-    // 5분 뒤 리스트 자동 파기 스펙 유지
     setTimeout(() => {
       cloudMockGroups = cloudMockGroups.filter(g => g._id !== group._id);
       io.emit('room_deleted', { id: group._id }); 
@@ -102,26 +127,36 @@ app.post('/api/groups/:id/join', (req, res) => {
   }
   
   io.emit('status_updated', { group });
-  res.status(200).json({ message: '참여 완료', group, matchNotification });
+  res.status(200).json({ message: '참여 완료', group });
 });
 
-// 4. [API] 매칭 중 취소하기 기능
+// 5. [API] 방장 방 폭파 vs 참가자 참가 취소 권한 분리 라우터
 app.post('/api/groups/:id/leave', (req, res) => {
   const { userName } = req.body;
   const group = cloudMockGroups.find(g => g._id === req.params.id);
-  if (!group) return res.status(404).json({ message: '방이 없습니다.' });
+  if (!group) return res.status(404).json({ message: '방이 존재하지 않습니다.' });
   
-  if (group.status === '모집중') {
-    group.participants = group.participants.filter(p => p !== userName);
-    if (group.participants.length === 0) {
-      cloudMockGroups = cloudMockGroups.filter(g => g._id !== group._id);
-      io.emit('room_deleted', { id: group._id });
-    } else {
-      io.emit('status_updated', { group });
-    }
-    return res.status(200).json({ message: '취소 완료', group });
+  if (group.status !== '모집중') {
+    return res.status(400).json({ message: '이미 매칭이 완료되어 취소할 수 없습니다.' });
   }
-  return res.status(400).json({ message: '이미 매칭이 완료되어 취소할 수 없습니다.' });
+
+  // 👑 배열의 첫 번째 자리에 있는 유저가 방장(최초 개설자)입니다.
+  const isOwner = group.participants[0] === userName;
+
+  if (isOwner) {
+    // 💥 방장이 취소한 경우: 방 자체를 파기
+    cloudMockGroups = cloudMockGroups.filter(g => g._id !== group._id);
+    io.emit('room_deleted', { id: group._id });
+    return res.status(200).json({ action: 'delete', message: '🚪 방장 권한으로 공구방을 폭파했습니다.' });
+  } else {
+    // 👥 참가자가 취소한 경우: 해당 참가자만 명단에서 제외
+    if (!group.participants.includes(userName)) {
+      return res.status(400).json({ message: '이 공구방에 참여하고 있지 않습니다.' });
+    }
+    group.participants = group.participants.filter(p => p !== userName);
+    io.emit('status_updated', { group });
+    return res.status(200).json({ action: 'leave', message: '👋 공동구매 참여를 취소했습니다.' });
+  }
 });
 
 io.on('connection', (socket) => {
@@ -133,6 +168,6 @@ if (process.env.MONGO_URI) {
   mongoose.connect(process.env.MONGO_URI).catch(() => {});
 }
 
-server.listen(PORT, () => { console.log(`🚀 카카오 연동 버전 공구메이트 서비스 가동 포트: ${PORT}`); });
+server.listen(PORT, () => { console.log(`🚀 진짜 카카오 인증 가동 포트: ${PORT}`); });
 
 export default server;
