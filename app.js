@@ -28,11 +28,14 @@ app.get('/', (req, res) => {
 // ==========================================
 // 💛 [리얼 인프라] 진짜 카카오 로그인 Oauth2 핵심 라우터 (주소 고정 안전 버전)
 // ==========================================
+// ==========================================
+// 💛 [리얼 인프라] 진짜 카카오 로그인 Oauth2 핵심 라우터 (2차 검증 주소 완벽 고정)
+// ==========================================
 
 // 1. 프론트엔드가 카카오 로그인창을 열기 위해 요청하는 인증 주소 API
 app.get('/api/auth/kakao/url', (req, res) => {
   const REST_API_KEY = process.env.KAKAO_REST_KEY;
-  // 🌟 Render 환경 변수 오류를 막기 위해 진짜 리다이렉트 주소를 코드에 강제 고정합니다.
+  // 🌟 맨 뒤에 슬래시(/)가 절대 없어야 합니다. 카카오 등록 주소와 완벽 매칭!
   const REDIRECT_URI = "https://gonggu-project.onrender.com/api/auth/kakao/callback";
   
   const kakaoAuthUrl = `https://kauth.kakao.com/oauth/authorize?client_id=${REST_API_KEY}&redirect_uri=${REDIRECT_URI}&response_type=code`;
@@ -44,21 +47,29 @@ app.get('/api/auth/kakao/callback', async (req, res) => {
   const { code } = req.query;
   if (!code) return res.status(400).send('카카오 인증 코드가 없습니다.');
 
+  // 🌟 1차 주소와 단 한 글자도 틀리지 않게 똑같은 주소로 고정!
   const REDIRECT_URI = "https://gonggu-project.onrender.com/api/auth/kakao/callback";
 
   try {
-    // [A] 전달받은 인증 코드로 카카오 토큰 발급 요청
+    // [A] 전달받은 인증 코드로 카카오 토큰 발급 요청 (카카오 규격에 맞게 전송)
     const tokenRes = await fetch('https://kauth.kakao.com/oauth/token', {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=utf-8' },
       body: new URLSearchParams({
         grant_type: 'authorization_code',
         client_id: process.env.KAKAO_REST_KEY,
-        redirect_uri: REDIRECT_URI,
-        code
+        redirect_uri: REDIRECT_URI, // 👈 카카오 2차 검문소가 검증하는 주소입니다.
+        code: String(code)
       })
     });
+    
     const tokenData = await tokenRes.json();
+
+    // 🚨 혹시 카카오 내부에서 토큰 발급 실패 시 로그 추적용
+    if (tokenData.error) {
+      console.error('카카오 토큰 발급 에러 상세:', tokenData);
+      return res.status(400).send(`카카오 토큰 발급 실패: ${tokenData.error_description}`);
+    }
 
     // [B] 발급받은 토큰으로 진짜 카카오 유저 정보(프로필, 이름 등) 가져오기
     const userRes = await fetch('https://kapi.kakao.com/v2/user/me', {
