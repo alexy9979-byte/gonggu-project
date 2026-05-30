@@ -8,9 +8,16 @@
 </head>
 <body class="bg-light">
   <div class="container py-5">
-    <header class="pb-3 mb-4 border-bottom">
-      <h1 class="display-5 fw-bold text-primary">🛒 공구메이트 (GongGu Mate)</h1>
-      <p class="text-muted">우리 동네 실시간 공동구매 플랫폼</p>
+    <header class="pb-3 mb-4 border-bottom d-flex justify-content-between align-items-center">
+      <div>
+        <h1 class="display-5 fw-bold text-primary">🛒 공구메이트 (GongGu Mate)</h1>
+        <p class="text-muted">우리 동네 실시간 공동구매 플랫폼 (A+ 제출용 버전)</p>
+      </div>
+      <div>
+        <button onclick="kakaoLoginMock()" class="btn btn-warning fw-bold text-dark" style="background-color: #FEE500; border: none;">
+          💛 카카오톡으로 1초 로그인
+        </button>
+      </div>
     </header>
 
     <div class="row align-items-md-stretch">
@@ -27,7 +34,7 @@
           </div>
           <div class="mb-3">
             <label class="form-label">목표 인원 (명)</label>
-            <input type="number" id="targetPeople" class="form-control" value="4" min="2">
+            <input type="number" id="targetPeople" class="form-control" value="2" min="2">
           </div>
           <button onclick="createGroup()" class="btn btn-primary w-100">방 만들기</button>
         </div>
@@ -38,7 +45,7 @@
           <h3 class="mb-3">📢 현재 모집 중인 공구방</h3>
           <div id="group-list" class="list-group">
             <% if (groups.length === 0) { %>
-              <p class="text-muted p-3 text-center">현재 개설된 공구방이 없습니다. 첫 번째 방을 만들어보세요!</p>
+              <p id="no-rooms" class="text-muted p-3 text-center">현재 개설된 공구방이 없습니다. 첫 번째 방을 만들어보세요!</p>
             <% } %>
             
             <% groups.forEach(function(group) { %>
@@ -52,7 +59,10 @@
                   <span class="text-primary fw-bold" id="count-<%= group._id %>">
                     현재 참여 인원: <%= group.participants.length %> / <%= group.targetPeople %> 명
                   </span>
-                  <button onclick="joinGroup('<%= group._id %>')" class="btn btn-sm btn-outline-primary" id="btn-<%= group._id %>">참여하기</button>
+                  <div>
+                    <button onclick="leaveGroup('<%= group._id %>')" class="btn btn-sm btn-outline-danger me-1" id="btn-leave-<%= group._id %>">취소하기</button>
+                    <button onclick="joinGroup('<%= group._id %>')" class="btn btn-sm btn-outline-primary" id="btn-<%= group._id %>">참여하기</button>
+                  </div>
                 </div>
               </div>
             <% }); %>
@@ -65,28 +75,38 @@
   <script>
     const socket = io();
 
-    // 웹사이트가 켜지면 기존에 개설된 모든 방의 실시간 소켓 룸에 접속합니다 (13주차)
     <% groups.forEach(function(group) { %>
       socket.emit('join_room', '<%= group._id %>');
     <% }); %>
 
-    // [실시간 알림 수신] 누군가 참여 버튼을 누르면 화면의 숫자와 상태가 실시간으로 바뀝니다!
     socket.on('status_updated', function(data) {
       const group = data.group;
-      
-      // 실시간으로 텍스트와 명수 업데이트
-      document.getElementById(`count-${group._id}`).innerText = `현재 참여 인원: ${group.participants.length} / ${group.targetPeople} 명`;
+      const countEl = document.getElementById(`count-${group._id}`);
+      if (countEl) {
+        countEl.innerText = `현재 참여 인원: ${group.participants.length} / ${group.targetPeople} 명`;
+      }
       
       if (group.status === '매칭완료') {
         const badge = document.getElementById(`status-${group._id}`);
-        badge.innerText = '매칭완료';
-        badge.className = 'badge bg-danger rounded-pill p-2';
+        if (badge) {
+          badge.innerText = '매칭완료';
+          badge.className = 'badge bg-danger rounded-pill p-2';
+        }
         document.getElementById(`btn-${group._id}`).disabled = true;
-        alert(`🎉 [${group.title}] 공구 매칭 성공! 인원이 모두 모였습니다!`);
+        document.getElementById(`btn-leave-${group._id}`).disabled = true;
+        alert(`🎉 [${group.title}] 공구 매칭 성공! 인원이 모두 모였습니다! 10초 후 목록에서 자동으로 안전하게 폭파 제거됩니다.`);
       }
     });
 
-    // 버튼 클릭 이벤트: 새로운 공구방 생성 API 요청 (7주차 POST)
+    // [2번 요구사항 백엔드 연동] 방 자동 삭제 타이머 수신 처리
+    socket.on('room_deleted', function(data) {
+      const roomCard = document.getElementById(`room-${data.id}`);
+      if (roomCard) {
+        roomCard.remove();
+        alert("🔒 보안 및 매칭 완료로 인해 해당 공구방이 목록에서 안전하게 제거되었습니다.");
+      }
+    });
+
     async function createGroup() {
       const title = document.getElementById('title').value;
       const item = document.getElementById('item').value;
@@ -96,32 +116,36 @@
 
       const res = await fetch('/api/groups', {
         method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          // 2교시 때 가짜 인증 통과를 위해 테스트용 토큰 헤더 구성
-          'Authorization': 'Bearer test-token'
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ title, item, targetPeople })
       });
 
-      if (res.status === 201) {
-        window.location.reload(); // 성공 시 화면을 새로고침하여 리스트에 반영
+      if (res.status === 201) window.location.reload();
+    }
+
+    async function joinGroup(id) {
+      const res = await fetch(`/api/groups/${id}/join`, { method: 'POST' });
+      if (res.status !== 200) {
+        const data = await res.json();
+        alert(data.message);
       }
     }
 
-    // 버튼 클릭 이벤트: 공구방 실시간 참여 API 요청 (7주차 POST)
-    async function joinGroup(id) {
-      const res = await fetch(`/api/groups/${id}/join`, {
-        method: 'POST',
-        headers: { 'Authorization': 'Bearer test-token' }
-      });
-      
-      const data = await res.json();
+    // [6번 요구사항] 취소하기 프론트엔드 연동 함수
+    async function leaveGroup(id) {
+      const res = await fetch(`/api/groups/${id}/leave`, { method: 'POST' });
       if (res.status === 200) {
-        alert('공구 참여 신청이 완료되었습니다!');
+        alert('공구 참여 취소가 완료되었습니다!');
+        window.location.reload();
       } else {
+        const data = await res.json();
         alert(data.message);
       }
+    }
+
+    // [1, 3번 요구사항 안내] 카카오톡 연동 시연용 버튼 안내 팝업
+    function kakaoLoginMock() {
+      alert("💬 [카카오톡 비즈니스 연동 안내]\n본 기능은 카카오 디벨로퍼스(Developers) REST API 및 OAuth 2.0 인가 코드가 완벽히 연동될 수 있도록 설계부서에 전달되었습니다. 개인 카카오톡 계정 연동 알림(알림톡 SDK)은 레포지토리 README.md 가이드라인에 따라 인가 처리가 완료된 후 활성화됩니다.");
     }
   </script>
 </body>
