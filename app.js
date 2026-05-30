@@ -28,16 +28,17 @@ app.get('/', (req, res) => {
 });
 
 // ==========================================
-// 📧 [100% 가동률] NAVER SMTP 기반 진짜 메일 발송 설정
+// 📧 [보안 마감] Google SMTP 기반 환경 변수 메일 서버 설정
 // ==========================================
 const transporter = nodemailer.createTransport({
-  service: 'naver',
-  host: 'smtp.naver.com',
-  port: 465,
-  secure: true, // 네이버 필수 SSL 보안 프로토콜
+  service: 'gmail',
+  host: 'smtp.gmail.com',
+  port: 587,
+  secure: false, 
   auth: {
-    user: 'alexy99@naver.com',      // 👈 1. 본인의 진짜 네이버 아이디만 적으세요 (뒤에 @naver.com은 제외!)
-    pass: 'xkrhstksvkdlzm'    // 👈 2. 평소 네이버 로그인할 때 쓰는 진짜 패스워드를 입력하세요
+    // 🌟 소스 코드에 주소를 직접 적지 않고 Render 대시보드 환경 변수에서 안전하게 꺼내옵니다!
+    user: process.env.GMAIL_USER, 
+    pass: process.env.GMAIL_PASS  
   }
 });
 
@@ -49,9 +50,8 @@ app.post('/api/auth/send-code', async (req, res) => {
   const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
   emailVerificationDB[email] = verificationCode;
 
-  // ⚠️ from 항목의 이메일 주소도 내 네이버 아이디 주소와 완벽히 일치해야 네이버가 스팸으로 차단하지 않습니다!
   const mailOptions = {
-    from: `"공구메이트 운영팀" <alexy99@naver.com>`, // 👈 3. 본인의 네이버 메일 주소로 똑같이 수정하세요
+    from: `"공구메이트 운영팀" <${process.env.GMAIL_USER}>`, 
     to: email,
     subject: '🛒 [공구메이트] 회원가입 이메일 인증번호입니다.',
     html: `
@@ -72,7 +72,7 @@ app.post('/api/auth/send-code', async (req, res) => {
     res.status(200).json({ message: '📧 입력하신 메일함으로 진짜 인증번호가 발송되었습니다! 메일함을 확인해주세요.' });
   } catch (error) {
     console.error('메일 전송 최종 실패 에러 로그:', error);
-    res.status(500).json({ message: '❌ 메일 발송 중 서버 오류가 발생했습니다. 네이버 아이디/비밀번호 및 SMTP 허용 설정을 확인하세요.', error: error.message });
+    res.status(500).json({ message: '❌ 메일 발송 중 서버 오류가 발생했습니다. Render 대시보드의 환경 변수를 확인하세요.', error: error.message });
   }
 });
 
@@ -159,7 +159,7 @@ app.post('/api/groups/:id/leave', (req, res) => {
       cloudMockGroups = cloudMockGroups.filter(g => g._id !== group._id);
       io.emit('room_deleted', { id: group._id });
     } else {
-      io.emit('status_updated', { group });
+      io.to(group._id).emit('status_updated', { group });
     }
     return res.status(200).json({ message: '취소 완료', group });
   }
@@ -175,6 +175,6 @@ if (process.env.MONGO_URI) {
   mongoose.connect(process.env.MONGO_URI).catch(() => {});
 }
 
-server.listen(PORT, () => { console.log(`🚀 완벽한 공구메이트 네이버 연동 버전 가동 포트: ${PORT}`); });
+server.listen(PORT, () => { console.log(`🚀 완벽한 공구메이트 구글 보안 모드 가동 포트: ${PORT}`); });
 
 export default server;
