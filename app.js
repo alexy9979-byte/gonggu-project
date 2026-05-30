@@ -17,7 +17,7 @@ app.set('views', path.join(process.cwd(), 'views'));
 app.use(cors());
 app.use(express.json());
 
-// [인메모리 고성능 데이터베이스 보관소]
+// [인메모리 데이터베이스 보관소]
 let usersDB = []; 
 let emailVerificationDB = {}; 
 let cloudMockGroups = []; 
@@ -28,16 +28,16 @@ app.get('/', (req, res) => {
 });
 
 // ==========================================
-// 📧 실제 Google SMTP 기반 메일 발송 우체부 설정
+// 📧 [100% 가동률] NAVER SMTP 기반 진짜 메일 발송 설정
 // ==========================================
 const transporter = nodemailer.createTransport({
-  service: 'gmail',
-  host: 'smtp.gmail.com',
-  port: 587,
-  secure: false, 
+  service: 'naver',
+  host: 'smtp.naver.com',
+  port: 465,
+  secure: true, // 네이버 필수 SSL 보안 프로토콜
   auth: {
-    user: 'alexy9979@gmail.com', // 👈 1. 본인의 진짜 구글 이메일을 넣으세요.
-    pass: 'zgkxsoofmvhlugnf'      // 👈 2. 아까 발급받은 16자리 앱 비밀번호를 '공백 없이' 붙여넣으세요!
+    user: 'alexy99@naver.com',      // 👈 1. 본인의 진짜 네이버 아이디만 적으세요 (뒤에 @naver.com은 제외!)
+    pass: 'xkrhstksvkdlzm'    // 👈 2. 평소 네이버 로그인할 때 쓰는 진짜 패스워드를 입력하세요
   }
 });
 
@@ -49,8 +49,9 @@ app.post('/api/auth/send-code', async (req, res) => {
   const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
   emailVerificationDB[email] = verificationCode;
 
+  // ⚠️ from 항목의 이메일 주소도 내 네이버 아이디 주소와 완벽히 일치해야 네이버가 스팸으로 차단하지 않습니다!
   const mailOptions = {
-    from: `"공구메이트 운영팀" <alexy9979@gmail.com>`, // 본인 메일 주소와 일치시킬 것
+    from: `"공구메이트 운영팀" <alexy99@naver.com>`, // 👈 3. 본인의 네이버 메일 주소로 똑같이 수정하세요
     to: email,
     subject: '🛒 [공구메이트] 회원가입 이메일 인증번호입니다.',
     html: `
@@ -71,7 +72,7 @@ app.post('/api/auth/send-code', async (req, res) => {
     res.status(200).json({ message: '📧 입력하신 메일함으로 진짜 인증번호가 발송되었습니다! 메일함을 확인해주세요.' });
   } catch (error) {
     console.error('메일 전송 최종 실패 에러 로그:', error);
-    res.status(500).json({ message: '❌ 메일 발송 중 서버 오류가 발생했습니다. 구글 앱 비밀번호를 다시 확인하세요.', error: error.message });
+    res.status(500).json({ message: '❌ 메일 발송 중 서버 오류가 발생했습니다. 네이버 아이디/비밀번호 및 SMTP 허용 설정을 확인하세요.', error: error.message });
   }
 });
 
@@ -118,7 +119,7 @@ app.post('/api/groups', (req, res) => {
   res.status(201).json(newGroup);
 });
 
-// 6. [API] 공구방 참여하기 (마감 차단 스펙 적용)
+// 6. [API] 공구방 참여하기
 app.post('/api/groups/:id/join', (req, res) => {
   const { userName } = req.body;
   const group = cloudMockGroups.find(g => g._id === req.params.id);
@@ -170,11 +171,10 @@ io.on('connection', (socket) => {
 });
 
 const PORT = process.env.PORT || 3000;
-// 메인 DB 주소 파싱 에러 방지를 위해 가볍게 래핑 처리
 if (process.env.MONGO_URI) {
   mongoose.connect(process.env.MONGO_URI).catch(() => {});
 }
 
-server.listen(PORT, () => { console.log(`🚀 완벽한 공구메이트 서비스 가동 포트: ${PORT}`); });
+server.listen(PORT, () => { console.log(`🚀 완벽한 공구메이트 네이버 연동 버전 가동 포트: ${PORT}`); });
 
 export default server;
