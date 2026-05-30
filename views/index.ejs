@@ -192,7 +192,7 @@
       if (res.status === 200) {
         alert(data.message);
         if (data.action === 'delete') {
-          location.reload(); // 방장이 터트린 경우 내 브라우저 즉시 리프레시
+          location.reload(); // 방장이 터트린 경우 내 브라우저 즉시 새로고침
         }
       } else {
         alert(data.message);
