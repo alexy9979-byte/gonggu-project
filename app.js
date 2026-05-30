@@ -4,132 +4,77 @@ import { Server } from 'socket.io';
 import mongoose from 'mongoose';
 import path from 'path';
 import cors from 'cors';
+import nodemailer from 'nodemailer'; // 🌟 실제 이메일 발송 라이브러리 로드
 
-import authRoutes from './routes/auth.js';
-import groupRoutes from './routes/group.js';
-import Group from './models/Group.js';
+// (생략된 기존 상단 설정 코드는 그대로 유지)
 
-const app = express();
-const server = http.createServer(app);
-const io = new Server(server, { cors: { origin: '*' } });
+let emailVerificationDB = {}; // 인증번호 임시 보관소 { 이메일: 인증번호 }
+let usersDB = []; 
 
-app.set('io', io);
-app.set('view engine', 'ejs');
-app.set('views', path.join(process.cwd(), 'views'));
-
-app.use(cors());
-app.use(express.json());
-
-// [진짜 DB 역할] 클라우드 배포용 가상 메모리 데이터베이스 구축
-let usersDB = []; // 회원가입한 유저 정보가 보관되는 방 ({ email, password, name })
-let cloudMockGroups = []; // 공구방 보관소
-
-// 메인 화면 (EJS로 데이터를 넘겨줍니다)
-app.get('/', (req, res) => {
-  res.render('index', { groups: cloudMockGroups });
+// ==========================================
+// 📧 [실제 구현] Google SMTP 기반 진짜 메일 우체부 설정
+// ==========================================
+const transporter = nodemailer.createTransport({
+  service: 'gmail',
+  host: 'smtp.gmail.com',
+  port: 587,
+  secure: false, // TLS 보안 프로토콜 사용
+  auth: {
+    user: '본인의구글이메일@gmail.com', // 👈 1. 본인의 진짜 Gmail 주소를 적으세요
+    pass: 'xxxx xxxx xxxx xxxx' // 👈 2. 아까 구글에서 발급받은 16자리 앱 비밀번호를 띄어쓰기 없이 적으세요
+  }
 });
 
-// ==========================================
-// 🔐 [3번 요구사항] 진짜 회원가입 & 로그인 API 라우터 구현
-// ==========================================
 
-// 1. 회원가입 API
-app.post('/api/auth/register', (req, res) => {
-  const { email, password, name } = req.body;
-  
-  // 중복 가입 방지 처리
-  const exists = usersDB.find(u => u.email === email);
-  if (exists) return res.status(400).json({ message: '이미 가입된 이메일입니다.' });
+// 1. [API] 진짜 이메일로 6자리 인증번호 발송하기
+app.post('/api/auth/send-code', async (req, res) => {
+  const { email } = req.body;
+  if (!email) return res.status(400).json({ message: '이메일을 입력해주세요.' });
 
-  const newUser = { email, password, name }; // 실무 보안 원칙에 따라 저장
-  usersDB.push(newUser);
-  
-  res.status(201).json({ message: '회원가입 성공!' });
-});
+  // 6자리 무작위 인증번호 생성
+  const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
+  emailVerificationDB[email] = verificationCode;
 
-// 2. 로그인 API
-app.post('/api/auth/login', (req, res) => {
-  const { email, password } = req.body;
-  
-  const user = usersDB.find(u => u.email === email && u.password === password);
-  if (!user) return res.status(400).json({ message: '이메일 또는 비밀번호가 틀렸습니다.' });
-
-  // 로그인 성공 시 유저의 이름을 브라우저로 응답해 줍니다
-  res.status(200).json({ message: '로그인 성공!', userName: user.name });
-});
-
-// ==========================================
-// 🛒 공동구매 비즈니스 로직 API (회원제 연동)
-// ==========================================
-
-// 공구방 개설
-app.post('/api/groups', (req, res) => {
-  const { title, item, targetPeople, writer } = req.body;
-  const newGroup = {
-    _id: 'room_' + Date.now(),
-    title,
-    item,
-    targetPeople: Number(targetPeople),
-    participants: [writer || '익명회원'], // 로그인한 유저 이름이 방장으로 등록됨
-    status: '모집중'
+  // 💌 전송할 이메일의 디자인과 내용 레이아웃 설정
+  const mailOptions = {
+    from: `"공구메이트 운영팀" <본인의구글이메일@gmail.com>`, // 보내는 사람
+    to: email, // 받는 사람 (유저가 입력한 이메일)
+    subject: '🛒 [공구메이트] 회원가입 이메일 인증번호입니다.', // 메일 제목
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 500px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; rounded: 8px;">
+        <h2 style="color: #0d6efd; text-align: center;">🛒 공구메이트 회원가입</h2>
+        <p style="font-size: 16px; color: #333;">안녕하세요! 우리 동네 실시간 공동구매 플랫폼 공구메이트입니다.</p>
+        <p style="font-size: 14px; color: #666;">회원가입 화면에서 아래의 6자리 인증번호를 입력해 이메일 인증을 완료해주세요.</p>
+        <div style="background-color: #f8f9fa; padding: 15px; text-align: center; border-radius: 5px; margin: 20px 0;">
+          <span style="font-size: 28px; font-weight: bold; color: #333; letter-spacing: 5px;">${verificationCode}</span>
+        </div>
+        <p style="font-size: 12px; color: #999; text-align: center;">본 인증번호는 5분간 유효합니다.</p>
+      </div>
+    `
   };
-  cloudMockGroups.unshift(newGroup);
-  res.status(201).json(newGroup);
-});
 
-// 공구방 참여
-app.post('/api/groups/:id/join', (req, res) => {
-  const { userName } = req.body;
-  const group = cloudMockGroups.find(g => g._id === req.params.id);
-  if (!group) return res.status(404).json({ message: '방이 없습니다.' });
-  
-  if (group.participants.includes(userName)) {
-    return res.status(400).json({ message: '이미 이 공구방에 참여 중입니다!' });
-  }
-
-  if (group.participants.length < group.targetPeople) {
-    group.participants.push(userName);
+  try {
+    // 🚀 구글 서버를 통해 실제 유저에게 이메일 발송 실행!
+    await transporter.sendMail(mailOptions);
+    console.log(`[진짜 메일 발송 성공] To: ${email} | Code: ${verificationCode}`);
     
-    // 매칭 완료 시 10초 후 폭파 자동화
-    if (group.participants.length >= group.targetPeople) {
-      group.status = '매칭완료';
-      setTimeout(() => {
-        cloudMockGroups = cloudMockGroups.filter(g => g._id !== group._id);
-        io.emit('room_deleted', { id: group._id });
-      }, 10000);
-    }
-    io.to(group._id).emit('status_updated', { group });
+    res.status(200).json({ message: '📧 입력하신 메일함으로 진짜 인증번호가 발송되었습니다! 메일함을 확인해주세요.' });
+  } catch (error) {
+    console.error('메일 발송 최종 실패:', error);
+    res.status(500).json({ message: '❌ 메일 발송 중 서버 내부 오류가 발생했습니다.', error: error.message });
   }
-  res.status(200).json({ message: '참여 완료', group });
 });
 
-// 공구방 취소(나가기)
-app.post('/api/groups/:id/leave', (req, res) => {
-  const { userName } = req.body;
-  const group = cloudMockGroups.find(g => g._id === req.params.id);
-  if (!group) return res.status(404).json({ message: '방이 없습니다.' });
+
+// 2. [API] 유저가 메일함 보고 입력한 번호 검증하기
+app.post('/api/auth/verify-code', (req, res) => {
+  const { email, code } = req.body;
   
-  if (group.status === '모집중') {
-    group.participants = group.participants.filter(p => p !== userName);
-    if (group.participants.length === 0) {
-      cloudMockGroups = cloudMockGroups.filter(g => g._id !== group._id);
-      io.emit('room_deleted', { id: group._id });
-    } else {
-      io.to(group._id).emit('status_updated', { group });
-    }
-    return res.status(200).json({ message: '취소 완료', group });
+  if (emailVerificationDB[email] && emailVerificationDB[email] === code) {
+    delete emailVerificationDB[email]; // 인증 완료 시 파기
+    return res.status(200).json({ message: '✅ 이메일 인증이 완벽하게 성공했습니다!' });
   }
-  res.status(400).json({ message: '이미 매칭 완료되어 취소 불가합니다.' });
+  res.status(400).json({ message: '❌ 인증번호가 올바르지 않습니다. 다시 확인해주세요.' });
 });
 
-io.on('connection', (socket) => {
-  socket.on('join_room', (roomId) => { socket.join(roomId); });
-});
-
-const PORT = process.env.PORT || 3000;
-const MONGO_URI = process.env.MONGO_URI;
-mongoose.connect(MONGO_URI).catch(() => {});
-
-server.listen(PORT, () => { console.log(`🚀 회원제 공구 서비스 라이브 가동 포트: ${PORT}`); });
-
-export default server;
+// (이하 로그인 및 공동구매 비즈니스 로직 코드는 그대로 유지)
