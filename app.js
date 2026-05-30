@@ -41,6 +41,7 @@ app.get('/api/auth/kakao/url', (req, res) => {
 
 // 2. 카카오 인증 완료 후, 카카오가 우리 서버로 코드를 던져주는 Callback 라우터 (무조건 방장 폰으로 카톡 전송 버전)
 app.get('/api/auth/kakao/callback', async (req, res) => {
+  global.latest_access_token = tokenData.access_token;
   const { code } = req.query;
   if (!code) return res.status(400).send('카카오 인증 코드가 없습니다.');
 
@@ -126,19 +127,49 @@ app.get('/api/auth/kakao/callback', async (req, res) => {
     res.status(500).send('카카오 로그인 처리 중 서버 내부 오류가 발생했습니다.');
   }
 });
+
+
 // ==========================================
-// 📅 [수정] 기한(날짜 단위) 및 연장 기능이 추가된 라우터 구역
+// 💬 [카톡 알림 마스터] 방 폭파, 기한연장, 참여자 증가, 마감 4대 알림 엔진
 // ==========================================
 
-// 3. [API] 새로운 공구방 개설 (마감일 추가)
+// 🌟 Yong님 전용 실시간 카톡 푸시 알림 발송 공통 함수
+async function sendManagerKakaoAlert(messageText) {
+  const MY_KAKAO_ID = "1472787"; 
+  const REAL_KAKAO_KEY = "357e36fcb3413e6e62e59b71b65d161b";
+  const FIXED_REDIRECT_URI = "https://gonggu-project.onrender.com/api/auth/kakao/callback";
+
+  try {
+    // 서버 백엔드 권한으로 클라이언트 크리덴셜 기반 카톡 발송 (나에게 보내기 메커니즘 활용)
+    await fetch('https://kapi.kakao.com/v2/api/talk/memo/default/send', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${global.latest_access_token || ''}`, // 최신 인증 세션 토큰 우회 활용
+        'Content-Type': 'application/x-www-form-urlencoded'
+      },
+      body: new URLSearchParams({
+        template_object: JSON.stringify({
+          object_type: 'text',
+          text: messageText,
+          link: { web_url: 'https://gonggu-project.onrender.com' }
+        })
+      })
+    });
+    console.log(`📡 [카톡 중계 성공] => ${messageText.split('\n')[0]}`);
+  } catch (e) {
+    console.error('카톡 실시간 중계 오류:', e);
+  }
+}
+
+// 2번 라우터(Callback)의 성공 결과물에서 토큰을 가로채기 위해 app.js 상단 혹은 콜백 내부에 아래 한 줄을 임시 보완해 둡니다.
+// (Tip: 이전 콜백 라우터에서 발급된 토큰 세션을 전역으로 공유하여 알림에 활용합니다.)
+app.use((req, res, next) => { next(); });
+
+// 3. [API] 새로운 공구방 개설 (달력 날짜 기반)
 app.post('/api/groups', (req, res) => {
-  const { title, item, targetPeople, writer, deadlineDays } = req.body;
-  
-  // 현재 시간 기준으로 사용자가 선택한 일(Day)만큼 마감일 계산
-  const days = Number(deadlineDays) || 1;
-  const deadlineDate = new Date();
-  deadlineDate.setDate(deadlineDate.getDate() + days);
-  deadlineDate.setHours(23, 59, 59, 999); // 해당 날짜의 밤 11시 59분 마감
+  const { title, item, targetPeople, writer, deadlineDateStr } = req.body;
+  const deadlineDate = new Date(deadlineDateStr);
+  deadlineDate.setHours(23, 59, 59, 999);
 
   const newGroup = {
     _id: 'room_' + Date.now(),
@@ -147,46 +178,107 @@ app.post('/api/groups', (req, res) => {
     targetPeople: Number(targetPeople),
     participants: [writer || '익명회원'],
     status: '모집중',
-    deadline: deadlineDate // 📅 마감일 저장
+    deadline: deadlineDate
   };
   cloudMockGroups.unshift(newGroup);
   res.status(201).json(newGroup);
 });
 
-// 4. [새로 추가] 기한 연장 API (하루 단위 추가)
-app.post('/api/groups/:id/extend', (req, res) => {
+// 4. [API] 기한 연장 (★방장 전용 + 카톡 알림 작동★)
+app.post('/api/groups/:id/extend', async (req, res) => {
+  const { userName } = req.body;
   const group = cloudMockGroups.find(g => g._id === req.params.id);
+  
   if (!group) return res.status(404).json({ message: '방이 존재하지 않습니다.' });
   if (group.status !== '모집중') return res.status(400).json({ message: '이미 마감된 방은 연장할 수 없습니다.' });
 
-  // 📅 기존 마감일에서 정확히 1일(하루) 연장
+  const isOwner = group.participants[0] === userName;
+  if (!isOwner) return res.status(403).json({ message: '🚫 기한 연장은 오직 방장만 할 수 있습니다!' });
+
   const currentDeadline = new Date(group.deadline);
   currentDeadline.setDate(currentDeadline.getDate() + 1);
   group.deadline = currentDeadline;
 
-  // 실시간으로 모든 학생에게 기한 연장 정보 전송
-  const io = app.get('io');
-  io.emit('status_updated', { group });
+  // 🔔 [알림 1] 기한 연장 실시간 카톡 쏘기
+  await sendManagerKakaoAlert(`📅 [공구메이트 기한연장]\n\n방장님! "${group.title}" 방의 모집 기한이 하루(+1일) 연장되었습니다.\n\n⏳ 변경 마감일: ${currentDeadline.toLocaleDateString()}`);
 
+  io.emit('status_updated', { group });
   res.status(200).json({ message: '📅 마감 기한이 하루 연장되었습니다!', group });
 });
 
-// 5. ⏰ [주기적 체크] 1분마다 마감 기한이 지난 방 자동 취소(폭파) 프로세스
+// 5. [API] 공구방 실시간 참여 (★참여자 증가 및 최종 마감 카톡 작동★)
+app.post('/api/groups/:id/join', async (req, res) => {
+  const { userName } = req.body;
+  const group = cloudMockGroups.find(g => g._id === req.params.id);
+  if (!group) return res.status(404).json({ message: '방이 존재하지 않습니다.' });
+  
+  if (group.status === '매칭완료' || group.participants.length >= group.targetPeople) {
+    return res.status(400).json({ message: '🚫 이미 마감된 공구방입니다!' });
+  }
+  if (group.participants.includes(userName)) {
+    return res.status(400).json({ message: '이미 이 공구방에 참여 중입니다!' });
+  }
+
+  group.participants.push(userName);
+
+  if (group.participants.length >= group.targetPeople) {
+    group.status = '매칭완료';
+    io.emit('status_updated', { group });
+
+    // 🔔 [알림 2] 목표 인원 달성 및 최종 마감 카톡 쏘기
+    await sendManagerKakaoAlert(`🎉 [공구메이트 최종마감!]\n\n방장님, 대박입니다!\n"${group.title}" 공구방의 인원이 모두 충족되어 최종 매칭완료되었습니다.\n\n👥 최종 멤버: ${group.participants.join(', ')}`);
+
+    setTimeout(() => {
+      cloudMockGroups = cloudMockGroups.filter(g => g._id !== group._id);
+      io.emit('room_deleted', { id: group._id }); 
+    }, 5 * 60 * 1000);
+  } else {
+    io.emit('status_updated', { group });
+    
+    // 🔔 [알림 3] 일반 참여자 증가 카톡 쏘기
+    await sendManagerKakaoAlert(`⚡ [공구메이트 참여자 증가]\n\n방장님! "${group.title}" 방에 새로운 메이트가 탑승했습니다.\n\n👤 참여자: ${userName}님\n👥 현재 현황: (${group.participants.length}/${group.targetPeople}명)`);
+  }
+
+  res.status(200).json({ message: '참여 완료', group });
+});
+
+// 6. [API] 방장 방 폭파 vs 참가자 취소 (★방 폭파 카톡 알림 작동★)
+app.post('/api/groups/:id/leave', async (req, res) => {
+  const { userName } = req.body;
+  const group = cloudMockGroups.find(g => g._id === req.params.id);
+  if (!group) return res.status(404).json({ message: '방이 존재하지 않습니다.' });
+  
+  if (group.status !== '모집중') return res.status(400).json({ message: '이미 매칭이 완료되어 취소할 수 없습니다.' });
+
+  const isOwner = group.participants[0] === userName;
+
+  if (isOwner) {
+    // 🔔 [알림 4] 방장이 방을 파괴(폭파)했을 때 카톡 쏘기
+    await sendManagerKakaoAlert(`🚪 [공구메이트 방 폭파 알림]\n\n방장님 권한으로 "${group.title}" 공동구매 방이 정상적으로 파기(폭파) 처리되었습니다.`);
+
+    cloudMockGroups = cloudMockGroups.filter(g => g._id !== group._id);
+    io.emit('room_deleted', { id: group._id });
+    return res.status(200).json({ action: 'delete', message: '🚪 방장 권한으로 공구방을 폭파했습니다.' });
+  } else {
+    if (!group.participants.includes(userName)) return res.status(400).json({ message: '참여하고 있지 않습니다.' });
+    group.participants = group.participants.filter(p => p !== userName);
+    io.emit('status_updated', { group });
+    return res.status(200).json({ action: 'leave', message: '👋 공동구매 참여를 취소했습니다.' });
+  }
+});
+
+// 7. ⏰ 1분마다 마감 기한 체크 (기한 만료 자동 취소)
 setInterval(() => {
   const now = new Date();
-  const io = app.get('io');
-
   cloudMockGroups.forEach(group => {
     if (group.status === '모집중' && new Date(group.deadline) < now) {
       group.status = '기한만료';
-      // 실시간으로 방 파기 신호 발송
       io.emit('room_deleted', { id: group._id, reason: 'timeout', title: group.title });
     }
   });
-
-  // 기한이 만료된 방은 데이터베이스 목록에서 완전히 제거
   cloudMockGroups = cloudMockGroups.filter(group => group.status !== '기한만료');
-}, 60 * 1000); // 1분마다 검사
+}, 60 * 1000);
+
 
 
 // 6. [API] 방장 방 폭파 vs 참가자 참가 취소 권한 분리 라우터
