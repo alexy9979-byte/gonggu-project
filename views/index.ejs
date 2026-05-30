@@ -2,268 +2,263 @@
 <html lang="ko">
 <head>
   <meta charset="UTF-8">
-  <title>🛒 공구메이트 - 실시간 공동구매</title>
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
-  <script src="/socket.io/socket.io.js"></script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>🛒 실시간 우리동네 공구메이트</title>
+  <!-- 세련된 UI를 위한 부트스트랩 CSS -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    body { background-color: #f8f9fa; font-family: 'Pretendard', sans-serif; }
+    .card { border-radius: 12px; border: none; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }
+    .kakao-btn {
+      background-color: #FEE500; color: #191919; border: none; padding: 14px;
+      font-size: 16px; font-weight: bold; border-radius: 8px; width: 100%;
+      display: flex; align-items: center; justify-content: center; gap: 10px;
+      transition: all 0.2s;
+    }
+    .kakao-btn:hover { background-color: #FADA0A; opacity: 0.9; }
+    .badge-recruiting { background-color: #0d6efd; }
+    .badge-matched { background-color: #198754; }
+  </style>
 </head>
-<body class="bg-light">
+<body>
 
-  <div id="auth-section" class="container py-5 mt-5" style="max-width: 450px;">
-    <div class="card p-4 shadow border-0 rounded-4">
-      <h2 class="text-center fw-bold text-primary mb-4">🛒 공구메이트</h2>
+  <div class="container py-5">
+    <!-- 헤더 영역 -->
+    <div class="text-center mb-5">
+      <h1 class="display-5 fw-bold text-primary">🛒 공구메이트</h1>
+      <p class="text-muted">우리 동네 이웃들과 함께하는 실시간 공동구매 플랫폼</p>
+    </div>
+
+    <!-- 1. 로그인/회원가입 섹션 (로그인 전 표시) -->
+    <div id="auth-section" class="card p-4 mx-auto mb-5" style="max-width: 450px;">
+      <h4 class="text-center fw-bold mb-3">💬 서비스 시작하기</h4>
+      <p class="text-center text-muted small mb-4">카카오톡 계정으로 1초 만에 간편하게 동네 실시간 공구에 참여해보세요!</p>
       
-      <div id="login-form">
-        <h4 class="mb-3 fw-semibold">로그인</h4>
-        <input type="email" id="login-email" class="form-control mb-2" placeholder="이메일 주소">
-        <input type="password" id="login-password" class="form-control mb-3" placeholder="비밀번호">
-        <button onclick="handleLogin()" class="btn btn-primary w-100 mb-3 fw-bold">로그인하기</button>
-        <p class="text-center text-muted small">계정이 없으신가요? <a href="#" onclick="toggleAuth(true)">회원가입</a></p>
-      </div>
-
-      <div id="register-form" style="display: none;">
-        <h4 class="mb-3 fw-semibold">회원가입</h4>
-        <input type="text" id="reg-name" class="form-control mb-2" placeholder="이름 (닉네임)">
-        
-        <div class="input-group mb-2">
-          <input type="email" id="reg-email" class="form-control" placeholder="사용할 이메일 주소">
-          <button onclick="sendAuthCode()" class="btn btn-outline-primary btn-sm" type="button">인증 요청</button>
-        </div>
-
-        <div class="input-group mb-3" id="verification-area" style="display: none;">
-          <input type="text" id="reg-code" class="form-control" placeholder="메일로 온 인증번호 6자리">
-          <button onclick="verifyAuthCode()" class="btn btn-primary btn-sm" type="button">인증 확인</button>
-        </div>
-        
-        <input type="hidden" id="is-email-verified" value="false">
-
-        <input type="password" id="reg-password" class="form-control mb-3" placeholder="비밀번호 설정" disabled>
-        <button onclick="handleRegister()" id="btn-submit-reg" class="btn btn-success w-100 mb-3 fw-bold" disabled>가입 완료하기</button>
-        <p class="text-center text-muted small">이미 계정이 있으신가요? <a href="#" onclick="toggleAuth(false)">로그인</a></p>
-      </div>
+      <button onclick="handleKakaoLogin()" class="kakao-btn">
+        <span>💛</span> 카카오 계정으로 로그인 / 가입
+      </button>
     </div>
-  </div>
 
-  <div id="main-section" class="container py-5" style="display: none;">
-    <header class="pb-3 mb-4 border-bottom d-flex justify-content-between align-items-center">
-      <div>
-        <h1 class="display-5 fw-bold text-primary">🛒 공구메이트</h1>
-        <p class="text-muted"><span id="user-welcome" class="fw-bold text-dark"></span>님 환영합니다!</p>
-      </div>
-      <button onclick="handleLogout()" class="btn btn-sm btn-outline-secondary">로그아웃</button>
-    </header>
-
-    <div class="row align-items-md-stretch">
-      <div class="col-md-4">
-        <div class="h-100 p-4 bg-white border rounded-3 shadow-sm">
-          <h3 class="mb-3">🚀 새로운 공구방 열기</h3>
-          <div class="mb-3">
-            <label class="form-label">공구방 제목</label>
-            <input type="text" id="title" class="form-control" placeholder="예: 정문 앞 치킨 공구">
-          </div>
-          <div class="mb-3">
-            <label class="form-label">모집 물품</label>
-            <input type="text" id="item" class="form-control" placeholder="예: 후라이드 치킨">
-          </div>
-          <div class="mb-3">
-            <label class="form-label">목표 인원 (명)</label>
-            <input type="number" id="targetPeople" class="form-control" value="2" min="2">
-          </div>
-          <button onclick="createGroup()" class="btn btn-primary w-100">방 만들기</button>
+    <!-- 2. 메인 대시보드 섹션 (로그인 후 표시 - 기본값은 숨김 처리) -->
+    <div id="main-dashboard" style="display: none;">
+      <!-- 상단 유저 환영 바 -->
+      <div class="alert alert-light card p-3 d-flex flex-row justify-content-between align-items-center mb-4">
+        <div>
+          <span class="fw-bold text-dark" id="user-display-name">홍길동</span>님, 반갑습니다! 
+          <span class="badge bg-warning text-dark ms-2">💬 카카오 연동중</span>
         </div>
+        <button onclick="handleLogout()" class="btn btn-outline-danger btn-sm">로그아웃</button>
       </div>
 
-      <div class="col-md-8">
-        <div class="h-100 p-4 bg-white border rounded-3 shadow-sm">
-          <h3 class="mb-3">📢 현재 모집 중인 공구방</h3>
-          <div id="group-list" class="list-group">
-            <% if (groups.length === 0) { %>
-              <p id="no-rooms-msg" class="text-muted p-3 text-center">현재 개설된 공구방이 없습니다. 첫 번째 방을 만들어보세요!</p>
-            <% } %>
-            <% groups.forEach(function(group) { %>
-              <div class="list-group-item p-3 mb-2 border rounded shadow-sm" id="room-<%= group._id %>">
-                <div class="d-flex w-100 justify-content-between align-items-center">
-                  <h5 class="mb-1 fw-bold text-dark"><%= group.title %></h5>
-                  <span class="badge <%= group.status === '매칭완료' ? 'bg-danger' : 'bg-success' %> rounded-pill p-2" id="status-<%= group._id %>"><%= group.status %></span>
-                </div>
-                <p class="mb-2 text-secondary">🎁 품목: <strong><%= group.item %></strong></p>
-                <div class="d-flex justify-content-between align-items-center">
-                  <span class="text-primary fw-bold">
-                    참여자: <span class="text-dark small" id="list-<%= group._id %>"><%= group.participants.join(', ') %></span> 
-                    (<span id="count-<%= group._id %>"><%= group.participants.length %></span> / <%= group.targetPeople %> 명)
-                  </span>
-                  <div>
-                    <button onclick="leaveGroup('<%= group._id %>')" class="btn btn-sm btn-outline-danger me-1" id="btn-leave-<%= group._id %>" <%= group.status === '매칭완료' ? 'disabled' : '' %>>취소하기</button>
-                    <button onclick="joinGroup('<%= group._id %>')" class="btn btn-sm btn-outline-primary" id="btn-<%= group._id %>" <%= group.status === '매칭완료' ? 'disabled' : '' %>>참여하기</button>
+      <div class="row">
+        <!-- 왼쪽: 공구방 개설하기 폼 -->
+        <div class="col-md-4 mb-4">
+          <div class="card p-4 h-100">
+            <h4 class="fw-bold text-dark mb-4">📦 새로운 공구 열기</h4>
+            <div class="mb-3">
+              <label class="form-label small fw-bold">공구방 제목</label>
+              <input type="text" id="group-title" class="form-control" placeholder="예: 한림아파트 앞 과일 노나드실 분">
+            </div>
+            <div class="mb-3">
+              <label class="form-label small fw-bold">구매할 물품</label>
+              <input type="text" id="group-item" class="form-control" placeholder="예: 샤인머스캣 3송이 박스">
+            </div>
+            <div class="mb-4">
+              <label class="form-label small fw-bold">목표 모집 인원 (명)</label>
+              <input type="number" id="group-target" class="form-control" value="2" min="2">
+            </div>
+            <button onclick="createGroup()" class="btn btn-primary w-100 fw-bold py-2">🚀 공동구매 방 개설</button>
+          </div>
+        </div>
+
+        <!-- 오른쪽: 실시간 공구 목록 리스트 -->
+        <div class="col-md-8 mb-4">
+          <div class="card p-4 h-100">
+            <h4 class="fw-bold text-dark mb-4">⚡ 우리 동네 실시간 공구 목록</h4>
+            <div id="group-list" class="row row-cols-1 g-3">
+              <!-- 서버에서 받아온 공구방 데이터가 ejs 렌더링 또는 소켓을 통해 그려집니다 -->
+              <% if (groups && groups.length > 0) { %>
+                <% groups.forEach(function(group) { %>
+                  <div class="col" id="card-<%= group._id %>">
+                    <div class="card p-3 border-start border-4 <%= group.status === '모집중' ? 'border-primary' : 'border-success' %>">
+                      <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                          <span class="badge <%= group.status === '모집중' ? 'badge-recruiting' : 'badge-matched' %> mb-2" id="status-badge-<%= group._id %>">
+                            <%= group.status %>
+                          </span>
+                          <h5 class="fw-bold mb-1"><%= group.title %></h5>
+                          <p class="text-muted small mb-2">📦 물품: <%= group.item %></p>
+                          <div class="small">
+                            👥 참여자 (<span id="count-<%= group._id %>"><%= group.participants.length %></span>/<%= group.targetPeople %>명): 
+                            <span class="text-dark fw-bold" id="people-<%= group._id %>"><%= group.participants.join(', ') %></span>
+                          </div>
+                        </div>
+                        <div class="d-flex flex-column gap-2" id="btn-area-<%= group._id %>">
+                          <% if (group.status === '모집중') { %>
+                            <button onclick="joinGroup('<%= group._id %>')" class="btn btn-sm btn-outline-primary px-3">참여하기</button>
+                            <button onclick="leaveGroup('<%= group._id %>')" class="btn btn-sm btn-outline-danger px-3">취소</button>
+                          <% } else { %>
+                            <button class="btn btn-sm btn-secondary" disabled>매칭완료</button>
+                          <% } %>
+                        </div>
+                      </div>
+                    </div>
                   </div>
+                <% }); %>
+              <% } else { %>
+                <div class="text-center py-5 text-muted" id="empty-message">
+                  현재 개설된 공구방이 없습니다. 첫 번째 방을 열어보세요!
                 </div>
-              </div>
-            <% }); %>
+              <% } %>
+            </div>
           </div>
         </div>
       </div>
     </div>
   </div>
 
+  <!-- 🛜 실시간 양방향 통신을 위한 Socket.io 및 라이브 로직 -->
+  <script src="/socket.io/socket.io.js"></script>
   <script>
     const socket = io();
-    let currentUser = sessionStorage.getItem('userName');
+    let currentUser = localStorage.getItem('공구메이트_유저') || null;
 
-    if (currentUser) showDashboard(currentUser);
-
-    // 로그인 - 회원가입 화면 스위칭 기능
-    function toggleAuth(isRegister) {
-      document.getElementById('login-form').style.display = isRegister ? 'none' : 'block';
-      document.getElementById('register-form').style.display = isRegister ? 'block' : 'none';
-    }
-
-    // 📧 1. 진짜 이메일 주소로 인증번호 발송 요청 함수
-    async function sendAuthCode() {
-      const email = document.getElementById('reg-email').value;
-      if(!email) return alert("이메일을 입력해주세요!");
-
-      const res = await fetch('/api/auth/send-code', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email })
-      });
-      const data = await res.json();
-      
-      alert(data.message); // 전송 결과 안내 (성공 혹은 실패 사유 알림)
-      if(res.status === 200) {
-        document.getElementById('verification-area').style.display = 'flex'; // 인증번호 입력칸 표시
-      }
-    }
-
-    // 📧 2. 유저가 입력한 메일 인증번호 매칭 검증 함수
-    async function verifyAuthCode() {
-      const email = document.getElementById('reg-email').value;
-      const code = document.getElementById('reg-code').value;
-      if(!code) return alert("인증번호를 입력해주세요!");
-
-      const res = await fetch('/api/auth/verify-code', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, code })
-      });
-      const data = await res.json();
-      alert(data.message);
-
-      if(res.status === 200) {
-        // 인증 통과 시 잠금장치 완전 해제 조치
-        document.getElementById('is-email-verified').value = "true";
-        document.getElementById('reg-email').disabled = true;
-        document.getElementById('reg-code').disabled = true;
-        document.getElementById('reg-password').disabled = false;  // 비번 창 열기
-        document.getElementById('btn-submit-reg').disabled = false; // 가입 버튼 활성화
-      }
-    }
-
-    // 📝 3. 회원가입 최종 제출 통신 (가입 성공 시 로그인 첫 페이지로 자동 이동)
-    async function handleRegister() {
-      const name = document.getElementById('reg-name').value;
-      const email = document.getElementById('reg-email').value;
-      const password = document.getElementById('reg-password').value;
-      const isVerified = document.getElementById('is-email-verified').value;
-
-      if(isVerified !== "true") return alert("이메일 인증을 먼저 완료해주세요!");
-      if(!name || !password) return alert("가입 비밀번호와 이름을 모두 입력하세요!");
-
-      const res = await fetch('/api/auth/register', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, email, password })
-      });
-      
-      if(res.status === 201) {
-        alert("🎉 회원가입 성공! 로그인 화면으로 자동으로 깔끔하게 이동합니다.");
-        toggleAuth(false); // 👈 가입 즉시 첫 화면(로그인 창)으로 폼 체인지 자동화 구현
+    // 브라우저가 켜졌을 때 로그인 세션 유무 체크 및 UI 스위칭
+    window.onload = function() {
+      if (currentUser) {
+        document.getElementById('auth-section').style.display = 'none';
+        document.getElementById('main-dashboard').style.display = 'block';
+        document.getElementById('user-display-name').innerText = currentUser;
       } else {
-        const data = await res.json();
-        alert(data.message);
+        document.getElementById('auth-section').style.display = 'block';
+        document.getElementById('main-dashboard').style.display = 'none';
+      }
+    };
+
+    // 💛 1. 카카오 간편 통합 로그인/가입 처리 함수
+    async function handleKakaoLogin() {
+      const userName = prompt("👥 시연용 카카오 계정 이름을 입력해주세요 (예: 홍길동):");
+      if (!userName || userName.trim() === "") return alert("이름을 입력해야 로그인이 가능합니다.");
+
+      const mockKakaoId = "kakao_" + Math.floor(Math.random() * 900000 + 100000);
+      const mockEmail = `${mockKakaoId}@kakao.com`;
+
+      const res = await fetch('/api/auth/kakao-login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ kakaoId: mockKakaoId, name: userName.trim(), email: mockEmail })
+      });
+      
+      const data = await res.json();
+      
+      if (res.status === 200) {
+        // 🔔 웰컴 알림톡 안내 시뮬레이션 얼럿 팝업
+        alert(`${data.message}\n\n${data.talkNotification}`);
+        
+        localStorage.setItem('공구메이트_유저', data.userName);
+        currentUser = data.userName;
+        
+        location.reload(); // 상태 적용 후 리로드
+      } else {
+        alert("카카오 연동 오류: " + data.message);
       }
     }
 
-    // 🔐 4. 백엔드 로그인 연동 처리
-    async function handleLogin() {
-      const email = document.getElementById('login-email').value;
-      const password = document.getElementById('login-password').value;
-      const res = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password })
-      });
-      const data = await res.json();
-      if(res.status === 200) {
-        sessionStorage.setItem('userName', data.userName);
-        showDashboard(data.userName);
-      } else { alert(data.message); }
+    // 로그아웃 처리
+    function handleLogout() {
+      localStorage.removeItem('공구메이트_유저');
+      location.reload();
     }
 
-    function showDashboard(name) {
-      currentUser = name;
-      document.getElementById('auth-section').style.display = 'none';
-      document.getElementById('main-section').style.display = 'block';
-      document.getElementById('user-welcome').innerText = name;
-    }
-
-    function handleLogout() { sessionStorage.clear(); window.location.reload(); }
-
-    // 🛒 5. 공동구매 서비스 액션 모듈 연동
+    // 📦 2. 새로운 공동구매 방 개설 요청
     async function createGroup() {
-      const title = document.getElementById('title').value;
-      const item = document.getElementById('item').value;
-      const targetPeople = document.getElementById('targetPeople').value;
-      if (!title || !item) return alert('내용을 입력해주세요!');
+      const title = document.getElementById('group-title').value;
+      const item = document.getElementById('group-item').value;
+      const targetPeople = document.getElementById('group-target').value;
 
-      await fetch('/api/groups', {
+      if (!title || !item) return alert("공구방 정보(제목/물품)를 입력해주세요!");
+
+      const res = await fetch('/api/groups', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ title, item, targetPeople, writer: currentUser })
       });
-      window.location.reload();
+
+      if (res.status === 201) {
+        alert("🚀 성공적으로 공동구매 방이 개설되었습니다!");
+        location.reload(); // 리스트 즉시 갱신
+      }
     }
 
+    // 🤝 3. 개설된 공구방 참여 신청 기능
     async function joinGroup(id) {
       const res = await fetch(`/api/groups/${id}/join`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userName: currentUser })
       });
+
       const data = await res.json();
-      if (res.status !== 200) {
-        alert(data.message);
+      if (res.status === 200) {
+        alert("✅ 공구방 참여 성공!");
+        // 만약 매칭완료 알림톡 스펙이 내려오면 함께 팝업 처리
+        if (data.matchNotification) {
+          alert(data.matchNotification);
+        }
       } else {
-        window.location.reload();
+        alert(data.message);
       }
     }
 
+    // 🚫 4. 공구방 매칭 취소 및 나가기 기능
     async function leaveGroup(id) {
       const res = await fetch(`/api/groups/${id}/leave`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userName: currentUser })
       });
+
       if (res.status === 200) {
-        alert('공구 참여를 취소했습니다.');
-        window.location.reload();
+        alert("🚪 공구방 참여를 취소했습니다.");
       } else {
-        const data = await res.json();
         alert(data.message);
       }
     }
 
-    // 📡 Socket.io 양방향 실시간 리스너 동기화
-    socket.on('status_updated', function(data) {
-      const group = data.group;
-      if(group.status === '매칭완료') {
-        alert(`🎉 [${group.title}] 공구 매칭 성공! 5분 뒤 리스트에서 안전하게 폭파 제거됩니다.`);
+    // ==========================================
+    // 🛜 Socket.io 실시간 웹소켓 화면 동기화 이벤트 무대
+    // ==========================================
+    
+    // 누군가 참여/취소하여 공구방 상태가 실시간 업데이트 되었을 때
+    socket.on('status_updated', (data) => {
+      const g = data.group;
+      
+      // 인원수 및 명단 갱신
+      const countEl = document.getElementById(`count-${g._id}`);
+      const peopleEl = document.getElementById(`people-${g._id}`);
+      if (countEl) countEl.innerText = g.participants.length;
+      if (peopleEl) peopleEl.innerText = g.participants.join(', ');
+
+      // 매칭 성사로 마감 스위칭 되었을 때 실시간 마감 처리
+      if (g.status === '매칭완료') {
+        const badge = document.getElementById(`status-badge-${g._id}`);
+        if (badge) {
+          badge.className = "badge badge-matched mb-2";
+          badge.innerText = "매칭완료";
+        }
+        const btnArea = document.getElementById(`btn-area-${g._id}`);
+        if (btnArea) {
+          btnArea.innerHTML = `<button class="btn btn-sm btn-secondary" disabled>매칭완료</button>`;
+        }
       }
-      window.location.reload();
     });
 
-    socket.on('room_deleted', function(data) {
-      const roomCard = document.getElementById(`room-${data.id}`);
-      if (roomCard) roomCard.remove();
+    // 5분 타이머가 끝나서 서버가 방을 폭파했거나 인원이 0명이 되어 방이 삭제되었을 때
+    socket.on('room_deleted', (data) => {
+      const targetCard = document.getElementById(`card-${data.id}`);
+      if (targetCard) {
+        targetCard.remove(); // 화면에서 즉시 흔적 삭제
+      }
     });
   </script>
 </body>
