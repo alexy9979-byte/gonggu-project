@@ -165,9 +165,11 @@ async function sendManagerKakaoAlert(messageText) {
 // (Tip: 이전 콜백 라우터에서 발급된 토큰 세션을 전역으로 공유하여 알림에 활용합니다.)
 app.use((req, res, next) => { next(); });
 
-// 3. [API] 새로운 공구방 개설 (달력 날짜 기반)
+// 3. [API] 새로운 공구방 개설 (배포 날짜 및 배포 장소 추가 버전)
 app.post('/api/groups', (req, res) => {
-  const { title, item, targetPeople, writer, deadlineDateStr } = req.body;
+  // 프론트엔드에서 넘겨받을 distDate(배포 날짜), distLocation(배포 건물) 추가
+  const { title, item, targetPeople, writer, deadlineDateStr, distDate, distLocation } = req.body;
+  
   const deadlineDate = new Date(deadlineDateStr);
   deadlineDate.setHours(23, 59, 59, 999);
 
@@ -178,7 +180,11 @@ app.post('/api/groups', (req, res) => {
     targetPeople: Number(targetPeople),
     participants: [writer || '익명회원'],
     status: '모집중',
-    deadline: deadlineDate
+    deadline: deadlineDate,
+    
+    // 🏫 핵심 데이터 추가 저장
+    distDate: distDate,          // 배포(수령) 예정 날짜 (예: 2026-06-05)
+    distLocation: distLocation   // 배포(수령) 예정 건물명
   };
   cloudMockGroups.unshift(newGroup);
   res.status(201).json(newGroup);
