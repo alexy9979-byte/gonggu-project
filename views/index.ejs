@@ -2,22 +2,42 @@
 <html lang="ko">
 <head>
   <meta charset="UTF-8">
-  <title>🛒 공구메이트 - 실시간 공동구매</title>
+  <title>🛒 공구메이트 - 회원제 실시간 공동구매</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
   <script src="/socket.io/socket.io.js"></script>
 </head>
 <body class="bg-light">
-  <div class="container py-5">
+
+  <div id="auth-section" class="container py-5 mt-5" style="max-width: 450px;">
+    <div class="card p-4 shadow border-0 rounded-4">
+      <h2 class="text-center fw-bold text-primary mb-4">🛒 공구메이트</h2>
+      
+      <div id="login-form">
+        <h4 class="mb-3 fw-semibold">로그인</h4>
+        <input type="email" id="login-email" class="form-control mb-2" placeholder="이메일 주소">
+        <input type="password" id="login-password" class="form-control mb-3" placeholder="비밀번호">
+        <button onclick="handleLogin()" class="btn btn-primary w-100 mb-3 fw-bold">로그인하기</button>
+        <p class="text-center text-muted small">계정이 없으신가요? <a href="#" onclick="toggleAuth(true)">회원가입</a></p>
+      </div>
+
+      <div id="register-form" style="display: none;">
+        <h4 class="mb-3 fw-semibold">회원가입</h4>
+        <input type="text" id="reg-name" class="form-control mb-2" placeholder="이름 (닉네임)">
+        <input type="email" id="reg-email" class="form-control mb-2" placeholder="사용할 이메일">
+        <input type="password" id="reg-password" class="form-control mb-3" placeholder="비밀번호 설정">
+        <button onclick="handleRegister()" class="btn btn-success w-100 mb-3 fw-bold">가입 완료하기</button>
+        <p class="text-center text-muted small">이미 계정이 있으신가요? <a href="#" onclick="toggleAuth(false)">로그인</a></p>
+      </div>
+    </div>
+  </div>
+
+  <div id="main-section" class="container py-5" style="display: none;">
     <header class="pb-3 mb-4 border-bottom d-flex justify-content-between align-items-center">
       <div>
-        <h1 class="display-5 fw-bold text-primary">🛒 공구메이트 (GongGu Mate)</h1>
-        <p class="text-muted">우리 동네 실시간 공동구매 플랫폼 (A+ 제출용 버전)</p>
+        <h1 class="display-5 fw-bold text-primary">🛒 공구메이트</h1>
+        <p class="text-muted"><span id="user-welcome" class="fw-bold text-dark"></span>님 환영합니다! 우리 동네 실시간 공구 판</p>
       </div>
-      <div>
-        <button onclick="kakaoLoginMock()" class="btn btn-warning fw-bold text-dark" style="background-color: #FEE500; border: none;">
-          💛 카카오톡으로 1초 로그인
-        </button>
-      </div>
+      <button onclick="handleLogout()" class="btn btn-sm btn-outline-secondary">로그아웃</button>
     </header>
 
     <div class="row align-items-md-stretch">
@@ -45,9 +65,8 @@
           <h3 class="mb-3">📢 현재 모집 중인 공구방</h3>
           <div id="group-list" class="list-group">
             <% if (groups.length === 0) { %>
-              <p id="no-rooms" class="text-muted p-3 text-center">현재 개설된 공구방이 없습니다. 첫 번째 방을 만들어보세요!</p>
+              <p id="no-rooms-msg" class="text-muted p-3 text-center">현재 개설된 공구방이 없습니다. 첫 번째 방을 만들어보세요!</p>
             <% } %>
-            
             <% groups.forEach(function(group) { %>
               <div class="list-group-item p-3 mb-2 border rounded shadow-sm" id="room-<%= group._id %>">
                 <div class="d-flex w-100 justify-content-between align-items-center">
@@ -57,7 +76,7 @@
                 <p class="mb-2 text-secondary">🎁 품목: <strong><%= group.item %></strong></p>
                 <div class="d-flex justify-content-between align-items-center">
                   <span class="text-primary fw-bold" id="count-<%= group._id %>">
-                    현재 참여 인원: <%= group.participants.length %> / <%= group.targetPeople %> 명
+                    참여자 목록: <span class="text-dark small" id="list-<%= group._id %>"><%= group.participants.join(', ') %></span> (<%= group.participants.length %> / <%= group.targetPeople %> 명)
                   </span>
                   <div>
                     <button onclick="leaveGroup('<%= group._id %>')" class="btn btn-sm btn-outline-danger me-1" id="btn-leave-<%= group._id %>">취소하기</button>
@@ -74,68 +93,105 @@
 
   <script>
     const socket = io();
+    let currentUser = sessionStorage.getItem('userName'); // 세션에서 로그인 정보 획득
 
-    <% groups.forEach(function(group) { %>
-      socket.emit('join_room', '<%= group._id %>');
-    <% }); %>
+    // 페이지 로드 시 로그인 상태 체크
+    if (currentUser) {
+      showDashboard(currentUser);
+    }
 
-    socket.on('status_updated', function(data) {
-      const group = data.group;
-      const countEl = document.getElementById(`count-${group._id}`);
-      if (countEl) {
-        countEl.innerText = `현재 참여 인원: ${group.participants.length} / ${group.targetPeople} 명`;
+    function toggleAuth(isRegister) {
+      document.getElementById('login-form').style.display = isRegister ? 'none' : 'block';
+      document.getElementById('register-form').style.display = isRegister ? 'block' : 'none';
+    }
+
+    // [회원가입 기능 백엔드 통신]
+    async function handleRegister() {
+      const name = document.getElementById('reg-name').value;
+      const email = document.getElementById('reg-email').value;
+      const password = document.getElementById('reg-password').value;
+
+      if(!name || !email || !password) return alert("가입 정보를 모두 입력하세요!");
+
+      const res = await fetch('/api/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, email, password })
+      });
+      const data = await res.json();
+      alert(data.message);
+      if(res.status === 201) toggleAuth(false); // 가입 성공 시 로그인 창으로 전환
+    }
+
+    // [로그인 기능 백엔드 통신]
+    async function handleLogin() {
+      const email = document.getElementById('login-email').value;
+      const password = document.getElementById('login-password').value;
+
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password })
+      });
+      const data = await res.json();
+      if(res.status === 200) {
+        sessionStorage.setItem('userName', data.userName); // 내 브라우저 열쇠고리에 이름 저장
+        showDashboard(data.userName);
+      } else {
+        alert(data.message);
       }
-      
-      if (group.status === '매칭완료') {
-        const badge = document.getElementById(`status-${group._id}`);
-        if (badge) {
-          badge.innerText = '매칭완료';
-          badge.className = 'badge bg-danger rounded-pill p-2';
-        }
-        document.getElementById(`btn-${group._id}`).disabled = true;
-        document.getElementById(`btn-leave-${group._id}`).disabled = true;
-        alert(`🎉 [${group.title}] 공구 매칭 성공! 인원이 모두 모였습니다! 10초 후 목록에서 자동으로 안전하게 폭파 제거됩니다.`);
-      }
-    });
+    }
 
-    // [2번 요구사항 백엔드 연동] 방 자동 삭제 타이머 수신 처리
-    socket.on('room_deleted', function(data) {
-      const roomCard = document.getElementById(`room-${data.id}`);
-      if (roomCard) {
-        roomCard.remove();
-        alert("🔒 보안 및 매칭 완료로 인해 해당 공구방이 목록에서 안전하게 제거되었습니다.");
-      }
-    });
+    function showDashboard(name) {
+      currentUser = name;
+      document.getElementById('auth-section').style.display = 'none';
+      document.getElementById('main-section').style.display = 'block';
+      document.getElementById('user-welcome').innerText = name;
+    }
 
+    function handleLogout() {
+      sessionStorage.clear();
+      window.location.reload();
+    }
+
+    // 공동구매 액션 함수들 (내 진짜 이름 명패를 전송함)
     async function createGroup() {
       const title = document.getElementById('title').value;
       const item = document.getElementById('item').value;
       const targetPeople = document.getElementById('targetPeople').value;
 
-      if (!title || !item) return alert('내용을 모두 입력해주세요!');
+      if (!title || !item) return alert('내용을 입력해주세요!');
 
       const res = await fetch('/api/groups', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title, item, targetPeople })
+        body: JSON.stringify({ title, item, targetPeople, writer: currentUser })
       });
-
       if (res.status === 201) window.location.reload();
     }
 
     async function joinGroup(id) {
-      const res = await fetch(`/api/groups/${id}/join`, { method: 'POST' });
+      const res = await fetch(`/api/groups/${id}/join`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userName: currentUser })
+      });
       if (res.status !== 200) {
         const data = await res.json();
         alert(data.message);
+      } else {
+        window.location.reload();
       }
     }
 
-    // [6번 요구사항] 취소하기 프론트엔드 연동 함수
     async function leaveGroup(id) {
-      const res = await fetch(`/api/groups/${id}/leave`, { method: 'POST' });
+      const res = await fetch(`/api/groups/${id}/leave`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userName: currentUser })
+      });
       if (res.status === 200) {
-        alert('공구 참여 취소가 완료되었습니다!');
+        alert('공구 참여를 취소했습니다.');
         window.location.reload();
       } else {
         const data = await res.json();
@@ -143,10 +199,15 @@
       }
     }
 
-    // [1, 3번 요구사항 안내] 카카오톡 연동 시연용 버튼 안내 팝업
-    function kakaoLoginMock() {
-      alert("💬 [카카오톡 비즈니스 연동 안내]\n본 기능은 카카오 디벨로퍼스(Developers) REST API 및 OAuth 2.0 인가 코드가 완벽히 연동될 수 있도록 설계부서에 전달되었습니다. 개인 카카오톡 계정 연동 알림(알림톡 SDK)은 레포지토리 README.md 가이드라인에 따라 인가 처리가 완료된 후 활성화됩니다.");
-    }
+    // 소켓 실시간 동기화 바인딩
+    socket.on('status_updated', function(data) {
+      window.location.reload(); // 실시간 참여인원 명단 갱신을 위해 상쾌하게 동기화 리로드
+    });
+
+    socket.on('room_deleted', function(data) {
+      const roomCard = document.getElementById(`room-${data.id}`);
+      if (roomCard) roomCard.remove();
+    });
   </script>
 </body>
 </html>
