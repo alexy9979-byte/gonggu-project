@@ -20,8 +20,8 @@ const transporter = nodemailer.createTransport({
   port: 587,
   secure: false, // TLS 보안 프로토콜 사용
   auth: {
-    user: '본인의구글이메일@gmail.com', // 👈 1. 본인의 진짜 Gmail 주소를 적으세요
-    pass: 'xxxx xxxx xxxx xxxx' // 👈 2. 아까 구글에서 발급받은 16자리 앱 비밀번호를 띄어쓰기 없이 적으세요
+    user: 'alexy9979@gmail.com', // 👈 1. 본인의 진짜 Gmail 주소를 적으세요
+    pass: 'zgkxsoofmvhlugnf' // 👈 2. 아까 구글에서 발급받은 16자리 앱 비밀번호를 띄어쓰기 없이 적으세요
   }
 });
 
@@ -37,7 +37,7 @@ app.post('/api/auth/send-code', async (req, res) => {
 
   // 💌 전송할 이메일의 디자인과 내용 레이아웃 설정
   const mailOptions = {
-    from: `"공구메이트 운영팀" <본인의구글이메일@gmail.com>`, // 보내는 사람
+    from: `"공구메이트 운영팀" <alexy9979@gmail.com>`, // 보내는 사람
     to: email, // 받는 사람 (유저가 입력한 이메일)
     subject: '🛒 [공구메이트] 회원가입 이메일 인증번호입니다.', // 메일 제목
     html: `
