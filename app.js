@@ -26,12 +26,16 @@ app.get('/', (req, res) => {
 });
 
 // ==========================================
-// 💛 [리얼 인프라] 진짜 카카오 로그인 Oauth2 핵심 라우터
+// 💛 [리얼 인프라] 진짜 카카오 로그인 Oauth2 핵심 라우터 (주소 고정 안전 버전)
 // ==========================================
 
 // 1. 프론트엔드가 카카오 로그인창을 열기 위해 요청하는 인증 주소 API
 app.get('/api/auth/kakao/url', (req, res) => {
-  const kakaoAuthUrl = `https://kauth.kakao.com/oauth/authorize?client_id=${process.env.KAKAO_REST_KEY}&redirect_uri=${process.env.KAKAO_REDIRECT_URI}&response_type=code`;
+  const REST_API_KEY = process.env.KAKAO_REST_KEY;
+  // 🌟 Render 환경 변수 오류를 막기 위해 진짜 리다이렉트 주소를 코드에 강제 고정합니다.
+  const REDIRECT_URI = "https://gonggu-project.onrender.com/api/auth/kakao/callback";
+  
+  const kakaoAuthUrl = `https://kauth.kakao.com/oauth/authorize?client_id=${REST_API_KEY}&redirect_uri=${REDIRECT_URI}&response_type=code`;
   res.json({ url: kakaoAuthUrl });
 });
 
@@ -39,6 +43,8 @@ app.get('/api/auth/kakao/url', (req, res) => {
 app.get('/api/auth/kakao/callback', async (req, res) => {
   const { code } = req.query;
   if (!code) return res.status(400).send('카카오 인증 코드가 없습니다.');
+
+  const REDIRECT_URI = "https://gonggu-project.onrender.com/api/auth/kakao/callback";
 
   try {
     // [A] 전달받은 인증 코드로 카카오 토큰 발급 요청
@@ -48,7 +54,7 @@ app.get('/api/auth/kakao/callback', async (req, res) => {
       body: new URLSearchParams({
         grant_type: 'authorization_code',
         client_id: process.env.KAKAO_REST_KEY,
-        redirect_uri: process.env.KAKAO_REDIRECT_URI,
+        redirect_uri: REDIRECT_URI,
         code
       })
     });
@@ -144,7 +150,7 @@ app.post('/api/groups/:id/leave', (req, res) => {
   const isOwner = group.participants[0] === userName;
 
   if (isOwner) {
-    // 💥 방장이 취소한 경우: 방 자체를 파기
+    // 💥 방장이 취소한 경우: 방 전체를 파기
     cloudMockGroups = cloudMockGroups.filter(g => g._id !== group._id);
     io.emit('room_deleted', { id: group._id });
     return res.status(200).json({ action: 'delete', message: '🚪 방장 권한으로 공구방을 폭파했습니다.' });
