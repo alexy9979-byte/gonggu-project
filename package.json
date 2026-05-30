@@ -13,7 +13,8 @@
     "mongoose": "^9.6.3",
     "socket.io": "^4.8.3"
   },
-  "scripts": {
+ "scripts": {
+    "start": "node app.js",
     "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js --runInBand --detectOpenHandles --forceExit"
   },
   "devDependencies": {
